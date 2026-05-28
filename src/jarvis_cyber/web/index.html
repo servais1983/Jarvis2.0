@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jarvis Cyber</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Jarvis Cyber</p>
+          <h1>Ton collègue cyber augmenté.</h1>
+          <p class="subtle">
+            Chat, analyse CVE, triage d'alerte et brouillon d'incident depuis une seule interface.
+          </p>
+        </div>
+        <div class="status-card">
+          <span class="status-dot"></span>
+          <div>
+            <strong>Mode de travail</strong>
+            <p id="runtime-status">Connexion en cours…</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="auth-shell">
+        <article class="panel auth-panel">
+          <div class="panel-heading compact-auth-heading">
+            <div>
+              <p class="eyebrow">Identité</p>
+              <h2>Connexion</h2>
+            </div>
+            <div id="auth-status" class="auth-chip">Vérification…</div>
+          </div>
+
+          <div class="auth-grid">
+            <form id="login-form" class="stack">
+              <label>
+                Email
+                <input id="login-email" type="email" placeholder="toi@example.com" />
+              </label>
+              <label>
+                Mot de passe
+                <input id="login-password" type="password" placeholder="••••••••" />
+              </label>
+              <label>
+                Code MFA (si activé)
+                <input id="login-mfa-code" inputmode="numeric" placeholder="123456" />
+              </label>
+              <button type="submit">Se connecter</button>
+            </form>
+
+            <form id="register-form" class="stack">
+              <label>
+                Nouvel email
+                <input id="register-email" type="email" placeholder="toi@example.com" />
+              </label>
+              <label>
+                Nouveau mot de passe
+                <input id="register-password" type="password" placeholder="8 caractères minimum" />
+              </label>
+              <button type="submit">Créer le compte</button>
+            </form>
+          </div>
+
+          <div class="auth-session">
+            <p id="auth-message" class="subtle">Mode local en cours de vérification.</p>
+            <button id="logout-button" type="button" class="secondary-button">Se déconnecter</button>
+          </div>
+
+          <div id="session-console" class="session-console hidden">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Sécurité</p>
+                <h2>Sessions actives</h2>
+              </div>
+            </div>
+            <div id="session-list" class="session-list empty">Aucune session active chargée.</div>
+          </div>
+
+          <div id="mfa-console" class="session-console hidden">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Sécurité</p>
+                <h2>Authentification MFA</h2>
+              </div>
+            </div>
+            <p id="mfa-status" class="subtle">État MFA non chargé.</p>
+            <div class="dual-panel-grid">
+              <form id="mfa-enroll-form" class="stack">
+                <label>
+                  Nom du facteur
+                  <input id="mfa-label" placeholder="Téléphone personnel" />
+                </label>
+                <button type="submit">Créer un facteur TOTP</button>
+              </form>
+              <form id="mfa-verify-form" class="stack">
+                <label>
+                  Premier code TOTP
+                  <input id="mfa-verify-code" inputmode="numeric" placeholder="123456" />
+                </label>
+                <button type="submit">Vérifier le facteur</button>
+              </form>
+            </div>
+            <div id="mfa-enrollment-result" class="result empty">
+              Aucun facteur en cours d'enrôlement.
+            </div>
+            <div class="dual-panel-grid mfa-management-grid">
+              <section>
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Secours</p>
+                    <h2>Codes de récupération</h2>
+                  </div>
+                </div>
+                <button id="mfa-recovery-codes-button" type="button">Générer de nouveaux codes</button>
+                <div id="mfa-recovery-codes-result" class="result empty">
+                  Aucun code de récupération généré dans cette session.
+                </div>
+              </section>
+              <section>
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Facteurs</p>
+                    <h2>Facteurs enregistrés</h2>
+                  </div>
+                </div>
+                <div id="mfa-factor-list" class="method-list empty">Aucun facteur chargé.</div>
+              </section>
+            </div>
+          </div>
+
+          <div id="admin-console" class="admin-console hidden">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Administration</p>
+                <h2>Utilisateurs</h2>
+              </div>
+            </div>
+            <div id="admin-user-list" class="admin-user-list empty">Aucun utilisateur chargé.</div>
+
+            <div class="panel-heading compact-heading audit-heading">
+              <div>
+                <p class="eyebrow">Audit</p>
+                <h2>Derniers événements</h2>
+              </div>
+            </div>
+            <form id="audit-filter-form" class="audit-filter">
+              <input id="audit-event-type" placeholder="Filtrer par type d'événement" />
+              <button type="submit">Filtrer</button>
+              <button id="audit-export-button" type="button" class="secondary-button">Exporter CSV</button>
+            </form>
+            <div id="audit-event-list" class="audit-event-list empty">Aucun événement chargé.</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel profile-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Profil</p>
+              <h2>Ton contexte de travail</h2>
+            </div>
+          </div>
+
+          <form id="profile-form" class="stack">
+            <div class="two-column-form">
+              <label>
+                Nom affiché
+                <input id="profile-display-name" placeholder="Stéphane" />
+              </label>
+              <label>
+                Fonction
+                <input id="profile-job-title" placeholder="Analyste SOC" />
+              </label>
+              <label>
+                Organisation
+                <input id="profile-organization" placeholder="Entreprise / équipe" />
+              </label>
+              <label>
+                Fuseau horaire
+                <input id="profile-timezone" placeholder="Europe/Brussels" />
+              </label>
+              <label>
+                Langue préférée
+                <input id="profile-language" placeholder="fr" />
+              </label>
+              <label>
+                Style de réponse
+                <select id="profile-response-style">
+                  <option value="concise">concise</option>
+                  <option value="balanced">équilibré</option>
+                  <option value="detailed">détaillé</option>
+                </select>
+              </label>
+              <label>
+                Préférence d'approbation
+                <select id="profile-approval-preference">
+                  <option value="ask_before_sensitive_actions">demander avant action sensible</option>
+                  <option value="always_ask">toujours demander</option>
+                  <option value="suggest_only">ne faire que suggérer</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Environnement de travail
+              <textarea
+                id="profile-environment-summary"
+                rows="3"
+                placeholder="Ex. Microsoft 365, Sentinel, Defender, parc Windows, environnements clients..."
+              ></textarea>
+            </label>
+            <label>
+              Domaines prioritaires
+              <textarea
+                id="profile-focus-areas"
+                rows="3"
+                placeholder="Ex. phishing, vulnérabilités critiques, réponse à incident, détection..."
+              ></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit">Enregistrer le profil</button>
+              <p id="profile-status" class="subtle">Profil non chargé.</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel chat-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Conversation</p>
+              <h2>Parler à Jarvis</h2>
+            </div>
+          </div>
+
+          <div id="chat-log" class="chat-log">
+            <div class="message assistant">
+              <span>Jarvis</span>
+              <p>Je suis prêt. Dis-moi sur quoi tu veux travailler.</p>
+            </div>
+          </div>
+
+          <form id="chat-form" class="stack">
+            <label>
+              Session
+              <input id="chat-session" value="perso" />
+            </label>
+            <label>
+              Message
+              <textarea id="chat-message" rows="4" placeholder="Aide-moi à trier cette alerte…"></textarea>
+            </label>
+            <button type="submit">Envoyer</button>
+          </form>
+
+          <div class="voice-controls">
+            <button id="voice-record" type="button">Démarrer l'écoute</button>
+            <button id="voice-speak-last" type="button">Lire la dernière réponse</button>
+            <button id="realtime-connect" type="button">Démarrer Realtime</button>
+            <button id="realtime-disconnect" type="button" disabled>Arrêter Realtime</button>
+            <p id="voice-status" class="subtle">Voix inactive.</p>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workflow 01</p>
+              <h2>Analyse CVE</h2>
+            </div>
+          </div>
+
+          <form id="cve-form" class="stack">
+            <label>
+              Identifiant CVE
+              <input id="cve-id" placeholder="CVE-2021-44228" />
+            </label>
+            <button type="submit">Enrichir et analyser</button>
+          </form>
+
+          <div id="cve-result" class="result empty">Aucune analyse lancée.</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workflow 02</p>
+              <h2>Triage d'alerte</h2>
+            </div>
+          </div>
+
+          <form id="alert-form" class="stack">
+            <label>
+              Titre
+              <input id="alert-title" placeholder="Impossible travel" />
+            </label>
+            <label>
+              Alerte brute
+              <textarea
+                id="alert-raw"
+                rows="4"
+                placeholder="Login from Brussels followed by login from Tokyo in 4 minutes."
+              ></textarea>
+            </label>
+            <label>
+              Contexte
+              <textarea id="alert-context" rows="3" placeholder="Utilisateur non connu pour voyager."></textarea>
+            </label>
+            <button type="submit">Trier l'alerte</button>
+          </form>
+
+          <div id="alert-result" class="result empty">Aucun triage lancé.</div>
+        </article>
+
+        <article class="panel investigation-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workflow 03</p>
+              <h2>Investigation guidée</h2>
+            </div>
+          </div>
+
+          <form id="investigation-form" class="stack">
+            <label>
+              Titre
+              <input id="investigation-title" placeholder="Impossible travel" />
+            </label>
+            <label>
+              Alerte brute
+              <textarea
+                id="investigation-raw"
+                rows="4"
+                placeholder="Login from Brussels followed by login from Tokyo in 4 minutes."
+              ></textarea>
+            </label>
+            <label>
+              Contexte
+              <textarea id="investigation-context" rows="3" placeholder="Utilisateur non connu pour voyager."></textarea>
+            </label>
+            <label>
+              Objectif
+              <textarea id="investigation-goal" rows="2" placeholder="Décider si l'alerte doit être escaladée et quoi vérifier ensuite."></textarea>
+            </label>
+            <label>
+              Profil d'investigation
+              <select id="investigation-profile">
+                <option value="">Automatique / aucun</option>
+              </select>
+            </label>
+            <div class="two-column-form">
+              <label>
+                Requête Drive (optionnelle)
+                <input id="investigation-drive-query" placeholder="name contains 'incident'" />
+              </label>
+              <label>
+                Requête Jira JQL (optionnelle)
+                <input id="investigation-jira-jql" placeholder="project = SEC ORDER BY updated DESC" />
+              </label>
+            </div>
+            <label class="inline-check">
+              <input id="investigation-include-github" type="checkbox" />
+              Ajouter les dépôts GitHub récemment mis à jour
+            </label>
+            <button type="submit">Lancer l'investigation</button>
+          </form>
+
+          <div id="investigation-result" class="result empty">Aucune investigation lancée.</div>
+        </article>
+
+        <article class="panel investigation-case-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Suivi</p>
+              <h2>Dossiers d'investigation</h2>
+            </div>
+          </div>
+
+          <div class="panel-heading compact-heading">
+            <div>
+              <p class="eyebrow">Mode quart SOC</p>
+              <h2>Brief opérationnel</h2>
+            </div>
+            <button id="refresh-shift-brief" type="button" class="secondary-button">Générer</button>
+          </div>
+          <div id="shift-brief-result" class="result empty">
+            Aucun brief de quart généré.
+          </div>
+
+          <div class="panel-heading compact-heading">
+            <div>
+              <p class="eyebrow">Timers SOC</p>
+              <h2>SLA & vieillissement</h2>
+            </div>
+            <button id="refresh-sla-watch" type="button" class="secondary-button">Vérifier</button>
+          </div>
+          <div id="sla-watch-result" class="result empty">
+            Aucun contrôle SLA généré.
+          </div>
+
+          <div class="panel-heading compact-heading">
+            <div>
+              <p class="eyebrow">Priorisation SOC</p>
+              <h2>File de travail</h2>
+            </div>
+            <button id="refresh-soc-queue" type="button" class="secondary-button">Actualiser</button>
+          </div>
+          <div id="soc-queue-list" class="method-list empty">
+            Aucune priorité SOC chargée.
+          </div>
+
+          <div class="dual-panel-grid">
+            <div id="investigation-case-list" class="method-list empty">
+              Aucun dossier d'investigation ouvert.
+            </div>
+            <div id="investigation-case-detail" class="result empty">
+              Lance une investigation puis cr?e un dossier pour suivre l'avancement.
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workflow 04</p>
+              <h2>Rapport d'incident</h2>
+            </div>
+          </div>
+
+          <form id="incident-form" class="stack">
+            <label>
+              Résumé
+              <textarea id="incident-summary" rows="3" placeholder="Suspicious PowerShell execution…"></textarea>
+            </label>
+            <label>
+              Chronologie
+              <textarea id="incident-timeline" rows="3" placeholder="10:02 alerte, 10:05 isolement…"></textarea>
+            </label>
+            <label>
+              Impact
+              <textarea id="incident-impact" rows="3" placeholder="Un poste affecté."></textarea>
+            </label>
+            <button type="submit">Générer le brouillon</button>
+          </form>
+
+          <div id="incident-result" class="result empty">Aucun brouillon généré.</div>
+        </article>
+
+        <article class="panel knowledge-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Mémoire</p>
+              <h2>Base documentaire</h2>
+            </div>
+          </div>
+
+          <form id="knowledge-form" class="stack">
+            <label>
+              Titre
+              <input id="knowledge-title" placeholder="Playbook phishing" />
+            </label>
+            <label>
+              Source
+              <input id="knowledge-source" placeholder="playbook-phishing.md" />
+            </label>
+            <label>
+              Contenu
+              <textarea
+                id="knowledge-content"
+                rows="5"
+                placeholder="Colle ici une procédure, une note ou un modèle de rapport…"
+              ></textarea>
+            </label>
+            <button type="submit">Ajouter au savoir</button>
+          </form>
+
+          <form id="knowledge-file-form" class="stack compact-stack">
+            <label>
+              Importer un ou plusieurs fichiers
+              <input id="knowledge-file" type="file" accept=".txt,.md,.markdown,.log,.pdf,.docx" multiple />
+            </label>
+            <button type="submit">Importer les fichiers</button>
+          </form>
+
+          <div id="knowledge-result" class="result empty">Aucun document ajouté.</div>
+          <div class="document-library">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Documents</p>
+                <h2>Bibliothèque</h2>
+              </div>
+            </div>
+            <div id="knowledge-list" class="document-list empty">Aucun document chargé.</div>
+          </div>
+        </article>
+
+        <article class="panel playbook-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Méthodes</p>
+              <h2>Profils de tâches et playbooks</h2>
+            </div>
+          </div>
+
+          <div class="dual-panel-grid">
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Format</p>
+                  <h2>Profil de tâche</h2>
+                </div>
+              </div>
+
+              <form id="task-profile-form" class="stack">
+                <label>
+                  Nom
+                  <input id="task-profile-name" placeholder="Brief SOC" />
+                </label>
+                <label>
+                  Description
+                  <textarea id="task-profile-description" rows="2" placeholder="À utiliser pour les synthèses rapides de quart."></textarea>
+                </label>
+                <label>
+                  Format de sortie attendu
+                  <textarea id="task-profile-output-format" rows="4" placeholder="1. Résumé&#10;2. Faits observés&#10;3. Risque&#10;4. Actions recommandées"></textarea>
+                </label>
+                <label>
+                  Checklist de relecture
+                  <textarea id="task-profile-review-checklist" rows="3" placeholder="Distinguer faits/hypothèses ; préciser les inconnues ; proposer la prochaine vérification."></textarea>
+                </label>
+                <button type="submit">Ajouter le profil</button>
+              </form>
+
+              <div id="task-profile-list" class="method-list empty">Aucun profil de tâche chargé.</div>
+            </section>
+
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Procédure</p>
+                  <h2>Playbook</h2>
+                </div>
+              </div>
+
+              <form id="playbook-form" class="stack">
+                <label>
+                  Titre
+                  <input id="playbook-title" placeholder="Triage phishing" />
+                </label>
+                <label>
+                  Objectif
+                  <textarea id="playbook-purpose" rows="2" placeholder="Qualifier rapidement un email suspect et décider de la suite."></textarea>
+                </label>
+                <label>
+                  Déclencheurs / mots-clés
+                  <input id="playbook-trigger-phrases" placeholder="phishing, email suspect, pièce jointe" />
+                </label>
+                <label>
+                  Profil de tâche associé
+                  <select id="playbook-task-profile">
+                    <option value="">Aucun</option>
+                  </select>
+                </label>
+                <label>
+                  Étapes
+                  <textarea id="playbook-steps" rows="5" placeholder="1. Identifier l'expéditeur&#10;2. Vérifier URLs et pièces jointes&#10;3. Chercher d'autres destinataires&#10;4. Conclure et proposer l'action"></textarea>
+                </label>
+                <label>
+                  Résultat attendu
+                  <textarea id="playbook-expected-outcome" rows="2" placeholder="Décision de triage + preuves principales + actions suivantes."></textarea>
+                </label>
+                <button type="submit">Ajouter le playbook</button>
+              </form>
+
+              <div id="playbook-list" class="method-list empty">Aucun playbook chargé.</div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel investigation-profile-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Méthodes</p>
+              <h2>Profils d'investigation</h2>
+            </div>
+          </div>
+
+          <div class="dual-panel-grid">
+            <form id="investigation-profile-form" class="stack">
+              <label>
+                Modèle prêt à l'emploi
+                <select id="investigation-profile-template">
+                  <option value="">Choisir un modèle</option>
+                </select>
+              </label>
+              <button id="prefill-investigation-profile-template" class="secondary-action" type="button">
+                Préremplir depuis le modèle
+              </button>
+              <label>
+                Nom
+                <input id="investigation-profile-name" placeholder="Compromission de compte" />
+              </label>
+              <label>
+                Description
+                <textarea id="investigation-profile-description" rows="2" placeholder="À utiliser pour les alertes de connexion suspecte ou d'identité compromise."></textarea>
+              </label>
+              <label>
+                Déclencheurs / mots-clés
+                <input id="investigation-profile-triggers" placeholder="impossible travel, compte compromis, identité" />
+              </label>
+              <label>
+                Objectif par défaut
+                <textarea id="investigation-profile-goal" rows="2" placeholder="Qualifier la compromission et décider d'une escalade."></textarea>
+              </label>
+              <label>
+                Checklist recommandée
+                <textarea id="investigation-profile-checks" rows="4" placeholder="Vérifier les connexions impossibles&#10;Contrôler les changements MFA&#10;Comparer avec l'activité habituelle"></textarea>
+              </label>
+              <label>
+                Requête Drive par défaut
+                <input id="investigation-profile-drive-query" placeholder="name contains 'identity'" />
+              </label>
+              <label>
+                Requête Jira par défaut
+                <input id="investigation-profile-jira-jql" placeholder="project = SEC AND labels = identity" />
+              </label>
+              <label class="inline-check">
+                <input id="investigation-profile-github" type="checkbox" />
+                Inclure les dépôts GitHub récents
+              </label>
+              <button type="submit">Ajouter le profil</button>
+            </form>
+
+            <div id="investigation-profile-list" class="method-list empty">
+              Aucun profil d'investigation chargé.
+            </div>
+          </div>
+        </article>
+
+        <article class="panel briefing-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Routine</p>
+              <h2>Watchlists et brief quotidien</h2>
+            </div>
+          </div>
+
+          <div class="dual-panel-grid">
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Surveillance</p>
+                  <h2>Listes suivies</h2>
+                </div>
+              </div>
+
+              <form id="watchlist-form" class="stack">
+                <label>
+                  Titre
+                  <input id="watchlist-title" placeholder="Microsoft 365" />
+                </label>
+                <label>
+                  Mots-clés NVD
+                  <input id="watchlist-keywords" placeholder="Microsoft Outlook" />
+                </label>
+                <div class="checkbox-row">
+                  <label>
+                    <input id="watchlist-exact-match" type="checkbox" />
+                    Expression exacte
+                  </label>
+                  <label>
+                    <input id="watchlist-kev-only" type="checkbox" />
+                    KEV uniquement
+                  </label>
+                </div>
+                <button type="submit">Ajouter la watchlist</button>
+              </form>
+
+              <div id="watchlist-list" class="method-list empty">Aucune watchlist chargée.</div>
+            </section>
+
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Brief</p>
+                  <h2>Résumé quotidien</h2>
+                </div>
+              </div>
+
+              <form id="daily-brief-form" class="stack">
+                <div class="two-column-form">
+                  <label>
+                    Fenêtre en jours
+                    <input id="daily-brief-days" type="number" min="1" max="30" value="1" />
+                  </label>
+                  <label>
+                    CVE max / watchlist
+                    <input id="daily-brief-limit" type="number" min="1" max="20" value="5" />
+                  </label>
+                </div>
+                <button type="submit">Générer le brief</button>
+              </form>
+
+              <div id="daily-brief-result" class="result empty">Aucun brief généré.</div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel automation-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Automatisation</p>
+              <h2>Routines planifiées</h2>
+            </div>
+          </div>
+
+          <div class="dual-panel-grid">
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Définition</p>
+                  <h2>Nouvelle routine</h2>
+                </div>
+              </div>
+
+              <form id="automation-form" class="stack">
+                <label>
+                  Nom
+                  <input id="automation-name" placeholder="Brief du matin" />
+                </label>
+                <div class="two-column-form">
+                  <label>
+                    Heure locale
+                    <input id="automation-time" type="time" value="08:00" />
+                  </label>
+                  <label>
+                    Fuseau horaire
+                    <input id="automation-timezone" value="Europe/Brussels" />
+                  </label>
+                  <label>
+                    Fenêtre du brief
+                    <input id="automation-days" type="number" min="1" max="30" value="1" />
+                  </label>
+                  <label>
+                    CVE max / watchlist
+                    <input id="automation-limit" type="number" min="1" max="20" value="5" />
+                  </label>
+                </div>
+                <label class="inline-check">
+                  <input id="automation-requires-approval" type="checkbox" />
+                  Exiger une approbation avant exécution
+                </label>
+                <button type="submit">Créer l'automatisation</button>
+              </form>
+            </section>
+
+            <section>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Exécutions</p>
+                  <h2>Routines actives</h2>
+                </div>
+              </div>
+
+              <button id="run-due-automations" type="button" class="secondary-button">Exécuter les routines dues</button>
+              <div id="automation-list" class="method-list empty">Aucune automatisation chargée.</div>
+              <div id="automation-run-list" class="method-list empty">Aucune exécution sélectionnée.</div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel inbox-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Inbox</p>
+              <h2>Livrables récents</h2>
+            </div>
+          </div>
+
+          <div class="inbox-actions">
+            <button id="refresh-inbox" type="button" class="secondary-button">Actualiser</button>
+          </div>
+          <div id="inbox-list" class="method-list empty">Aucun élément dans l'inbox.</div>
+        </article>
+
+        <article class="panel approval-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Contrôle humain</p>
+              <h2>Demandes d'approbation</h2>
+            </div>
+          </div>
+
+          <div class="inbox-actions">
+            <button id="refresh-approvals" type="button" class="secondary-button">Actualiser</button>
+          </div>
+          <div id="approval-list" class="method-list empty">Aucune demande d'approbation chargée.</div>
+        </article>
+
+        <article class="panel connector-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Connecteurs</p>
+              <h2>Sources externes</h2>
+            </div>
+          </div>
+
+          <div id="connector-status-list" class="method-list empty">Aucun statut chargé.</div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
