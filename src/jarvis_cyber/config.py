@@ -1,4 +1,4 @@
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,6 +62,25 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+
+    @field_validator(
+        "mfa_encryption_key",
+        "secret_vault_key",
+        "nvd_api_key",
+        "github_token",
+        "google_drive_access_token",
+        "jira_api_token",
+        "entra_id_access_token",
+        "defender_access_token",
+        "sentinel_access_token",
+        "openai_api_key",
+        mode="before",
+    )
+    @classmethod
+    def empty_secret_is_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 settings = Settings()

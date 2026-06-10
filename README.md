@@ -129,6 +129,22 @@ src/jarvis_cyber/
 
 ## Quickstart
 
+### Windows automatic start
+
+Double-click `start.bat`, or run:
+
+```bat
+start.bat
+```
+
+The script creates `.venv`, installs the project and development dependencies,
+creates `.env` from `.env.example`, checks the main Python imports, and starts
+Jarvis on `http://127.0.0.1:8000`.
+
+Voice, transcription, text-to-speech, embeddings, and Realtime require a valid
+`OPENAI_API_KEY` in `.env`. The startup script displays a warning when this key
+is missing.
+
 ### 1. Clone the repository
 
 ```bash
