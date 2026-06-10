@@ -4,9 +4,20 @@
 
 Donner à Jarvis Cyber une première interface orale sans réécrire tout le système.
 
-## MVP actuel
+## Mode gratuit par défaut
 
-Le flux vocal se déroule en deux temps :
+L'interface web utilise les API vocales natives du navigateur :
+
+- `SpeechRecognition` ou `webkitSpeechRecognition` pour transformer la voix en texte ;
+- `speechSynthesis` pour lire les réponses avec les voix installées sur Windows ;
+- `/chat` pour envoyer la transcription à Jarvis.
+
+Ce mode ne consomme aucun crédit OpenAI pour la reconnaissance ou la synthèse vocale.
+Chrome et Microsoft Edge offrent la meilleure compatibilité.
+
+## Mode OpenAI optionnel
+
+Les endpoints audio OpenAI restent disponibles pour un usage optionnel :
 
 1. l'utilisateur enregistre une question ;
 2. l'audio est transcrit ;

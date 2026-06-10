@@ -60,8 +60,6 @@ const voiceSpeakLastButton = document.querySelector("#voice-speak-last");
 const realtimeConnectButton = document.querySelector("#realtime-connect");
 const realtimeDisconnectButton = document.querySelector("#realtime-disconnect");
 const voiceStatus = document.querySelector("#voice-status");
-let mediaRecorder;
-let recordedChunks = [];
 let lastAssistantAnswer = "";
 let investigationProfileTemplates = [];
 let sentinelQueryTemplates = [];
@@ -72,6 +70,9 @@ let realtimePeerConnection;
 let realtimeDataChannel;
 let realtimeLocalStream;
 let realtimeCallId;
+let browserSpeechRecognition;
+let browserRealtimeActive = false;
+let browserVoiceBusy = false;
 let authToken = sessionStorage.getItem("jarvis_auth_token");
 let authRequired = false;
 let currentUser = null;
@@ -2709,132 +2710,139 @@ approvalList.addEventListener("click", async (event) => {
   }
 });
 
-voiceRecordButton.addEventListener("click", async () => {
-  try {
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-      mediaRecorder.stop();
-      voiceRecordButton.textContent = "Démarrer l'écoute";
-      voiceStatus.textContent = "Traitement de l'audio…";
+function speechRecognitionConstructor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition;
+}
+
+function speakWithBrowser(text) {
+  return new Promise((resolve, reject) => {
+    if (!("speechSynthesis" in window)) {
+      reject(new Error("Browser speech synthesis unavailable."));
       return;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) recordedChunks.push(event.data);
-    });
-    mediaRecorder.addEventListener("stop", async () => {
-      const blob = new Blob(recordedChunks, { type: "audio/webm" });
-      const formData = new FormData();
-      formData.append("file", blob, "question.webm");
-      formData.append("session_id", document.querySelector("#chat-session").value.trim() || "default");
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "fr-BE";
+    utterance.rate = 1;
+    utterance.onend = resolve;
+    utterance.onerror = reject;
+    window.speechSynthesis.speak(utterance);
+  });
+}
 
-      try {
-        const response = await fetch("/voice/chat", {
-          method: "POST",
-          body: formData,
-          headers: authHeaders(),
-        });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
-        appendMessage("user", data.transcript);
-        appendMessage("assistant", data.answer, data.citations);
-        voiceStatus.textContent = "Réponse vocale prête.";
-      } catch (error) {
-        voiceStatus.textContent = "Impossible de traiter la voix.";
-      }
+async function sendBrowserVoiceMessage(transcript, speakAnswer = false) {
+  const message = transcript.trim();
+  if (!message) return;
+
+  browserVoiceBusy = true;
+  appendMessage("user", message);
+  voiceStatus.textContent = "Jarvis réfléchit…";
+
+  try {
+    const sessionId = document.querySelector("#chat-session").value.trim() || "voice";
+    const data = await request("/chat", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId, message }),
     });
-    mediaRecorder.start();
-    voiceRecordButton.textContent = "Arrêter l'écoute";
-    voiceStatus.textContent = "Écoute en cours…";
+    appendMessage("assistant", data.answer, data.citations);
+    if (speakAnswer) {
+      voiceStatus.textContent = "Jarvis répond…";
+      await speakWithBrowser(data.answer);
+    }
+    voiceStatus.textContent = browserRealtimeActive
+      ? "Mode vocal gratuit actif. Tu peux parler."
+      : "Réponse vocale prête.";
   } catch (error) {
-    voiceStatus.textContent = "Micro indisponible.";
+    voiceStatus.textContent = "Impossible de traiter la demande vocale.";
+  } finally {
+    browserVoiceBusy = false;
+    if (browserRealtimeActive) startBrowserRealtimeListening();
+  }
+}
+
+function createBrowserRecognition({ onTranscript, onEnd }) {
+  const Recognition = speechRecognitionConstructor();
+  if (!Recognition) throw new Error("Speech recognition unavailable.");
+
+  const recognition = new Recognition();
+  recognition.lang = "fr-BE";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = (event) => {
+    const result = event.results[event.results.length - 1];
+    if (result.isFinal) onTranscript(result[0].transcript);
+  };
+  recognition.onerror = (event) => {
+    if (event.error !== "aborted" && event.error !== "no-speech") {
+      voiceStatus.textContent = `Erreur micro : ${event.error}.`;
+    }
+  };
+  recognition.onend = onEnd;
+  return recognition;
+}
+
+voiceRecordButton.addEventListener("click", () => {
+  try {
+    const recognition = createBrowserRecognition({
+      onTranscript: (transcript) => sendBrowserVoiceMessage(transcript),
+      onEnd: () => {
+        voiceRecordButton.disabled = false;
+        if (!browserVoiceBusy) voiceStatus.textContent = "Écoute terminée.";
+      },
+    });
+    voiceRecordButton.disabled = true;
+    voiceStatus.textContent = "Écoute gratuite en cours…";
+    recognition.start();
+  } catch (error) {
+    voiceStatus.textContent = "Reconnaissance vocale indisponible dans ce navigateur.";
   }
 });
 
 voiceSpeakLastButton.addEventListener("click", async () => {
   if (!lastAssistantAnswer) return;
 
-  voiceStatus.textContent = "Synthèse vocale en cours…";
+  voiceStatus.textContent = "Lecture avec la voix du système…";
   try {
-    const response = await fetch("/voice/speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ session_id: "voice", message: lastAssistantAnswer }),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const blob = await response.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    await audio.play();
-    voiceStatus.textContent = "Lecture en cours.";
+    await speakWithBrowser(lastAssistantAnswer);
+    voiceStatus.textContent = "Lecture terminée.";
   } catch (error) {
-    voiceStatus.textContent = "Impossible de lire la réponse.";
+    voiceStatus.textContent = "Synthèse vocale indisponible dans ce navigateur.";
   }
 });
 
-realtimeConnectButton.addEventListener("click", async () => {
-  voiceStatus.textContent = "Connexion Realtime…";
+function startBrowserRealtimeListening() {
+  if (!browserRealtimeActive || browserVoiceBusy) return;
 
   try {
-    const tokenData = await request("/realtime/token");
-    const ephemeralKey = tokenData.value;
-
-    realtimePeerConnection = new RTCPeerConnection();
-    const audioElement = document.createElement("audio");
-    audioElement.autoplay = true;
-    realtimePeerConnection.ontrack = (event) => {
-      audioElement.srcObject = event.streams[0];
-    };
-
-    realtimeLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    realtimePeerConnection.addTrack(realtimeLocalStream.getTracks()[0]);
-
-    realtimeDataChannel = realtimePeerConnection.createDataChannel("oai-events");
-    realtimeDataChannel.addEventListener("open", () => {
-      voiceStatus.textContent = "Realtime connecté. Tu peux parler.";
-    });
-    realtimeDataChannel.addEventListener("close", () => {
-      voiceStatus.textContent = "Realtime déconnecté.";
-    });
-    realtimeDataChannel.addEventListener("message", (event) => {
-      const payload = JSON.parse(event.data);
-      if (payload.type === "error") {
-        voiceStatus.textContent = "Erreur Realtime.";
-      }
-    });
-
-    const offer = await realtimePeerConnection.createOffer();
-    await realtimePeerConnection.setLocalDescription(offer);
-
-    const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
-      method: "POST",
-      body: offer.sdp,
-      headers: {
-        Authorization: `Bearer ${ephemeralKey}`,
-        "Content-Type": "application/sdp",
+    browserSpeechRecognition = createBrowserRecognition({
+      onTranscript: (transcript) => {
+        browserSpeechRecognition?.abort();
+        sendBrowserVoiceMessage(transcript, true);
+      },
+      onEnd: () => {
+        browserSpeechRecognition = undefined;
+        if (browserRealtimeActive && !browserVoiceBusy) {
+          window.setTimeout(startBrowserRealtimeListening, 250);
+        }
       },
     });
-    if (!sdpResponse.ok) throw new Error(await sdpResponse.text());
-    const location = sdpResponse.headers.get("Location");
-    realtimeCallId = location?.split("/").pop();
-    if (!realtimeCallId) throw new Error("Missing Realtime call id.");
-    await request("/realtime/sideband/connect", {
-      method: "POST",
-      body: JSON.stringify({ call_id: realtimeCallId }),
-    });
-
-    await realtimePeerConnection.setRemoteDescription({
-      type: "answer",
-      sdp: await sdpResponse.text(),
-    });
-
-    realtimeConnectButton.disabled = true;
-    realtimeDisconnectButton.disabled = false;
+    browserSpeechRecognition.start();
+    voiceStatus.textContent = "Mode vocal gratuit actif. Tu peux parler.";
   } catch (error) {
-    voiceStatus.textContent = "Impossible de lancer Realtime.";
-    await stopRealtimeSession();
+    browserRealtimeActive = false;
+    realtimeConnectButton.disabled = false;
+    realtimeDisconnectButton.disabled = true;
+    voiceStatus.textContent = "Mode vocal gratuit indisponible dans ce navigateur.";
   }
+}
+
+realtimeConnectButton.addEventListener("click", () => {
+  browserRealtimeActive = true;
+  realtimeConnectButton.disabled = true;
+  realtimeDisconnectButton.disabled = false;
+  startBrowserRealtimeListening();
 });
 
 realtimeDisconnectButton.addEventListener("click", async () => {
@@ -2842,6 +2850,10 @@ realtimeDisconnectButton.addEventListener("click", async () => {
 });
 
 async function stopRealtimeSession() {
+  browserRealtimeActive = false;
+  browserSpeechRecognition?.abort();
+  browserSpeechRecognition = undefined;
+  window.speechSynthesis?.cancel();
   if (realtimeCallId) {
     try {
       await request(`/realtime/sideband/${realtimeCallId}`, { method: "DELETE" });
@@ -2858,7 +2870,7 @@ async function stopRealtimeSession() {
   realtimeCallId = undefined;
   realtimeConnectButton.disabled = false;
   realtimeDisconnectButton.disabled = true;
-  voiceStatus.textContent = "Realtime arrêté.";
+  voiceStatus.textContent = "Mode vocal arrêté.";
 }
 
 async function initializeApp() {
