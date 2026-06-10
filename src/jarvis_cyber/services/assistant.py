@@ -1,7 +1,7 @@
 import json
 from typing import Callable, TypeVar
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 
 from jarvis_cyber.config import settings
@@ -58,12 +58,7 @@ class AssistantService:
         connector_context = connector_context_service.prompt_context()
 
         if self._client is None:
-            answer = (
-                "Jarvis Cyber est prêt en mode local. "
-                f"Tu as dit : « {message} ». "
-                f"{len(knowledge_hits)} extrait(s) documentaire(s) pertinent(s) trouvé(s). "
-                "Ajoute OPENAI_API_KEY dans le fichier .env pour activer le modèle réel."
-            )
+            answer = self._local_chat_fallback(message, len(knowledge_hits))
             memory_store.append(
                 user_id=user_id,
                 session_id=session_id,
@@ -93,12 +88,22 @@ class AssistantService:
             "avec le format [S1], [S2], etc."
         )
 
-        response = self._respond_with_tools(
-            user_id=user_id,
-            role=role,
-            instructions=instructions,
-            history=[{"role": turn.role, "content": turn.content} for turn in history],
-        )
+        try:
+            response = self._respond_with_tools(
+                user_id=user_id,
+                role=role,
+                instructions=instructions,
+                history=[{"role": turn.role, "content": turn.content} for turn in history],
+            )
+        except OpenAIError:
+            answer = self._local_chat_fallback(message, len(knowledge_hits))
+            memory_store.append(
+                user_id=user_id,
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+            )
+            return answer, settings.main_model, False, knowledge_hits, citations
         answer = response.output_text
         memory_store.append(
             user_id=user_id,
@@ -199,6 +204,15 @@ class AssistantService:
         return (
             "Mode local actif : le workflow est prêt mais aucun modèle distant n'est configuré. "
             f"Contenu reçu : {preview}"
+        )
+
+    @staticmethod
+    def _local_chat_fallback(message: str, knowledge_hit_count: int) -> str:
+        return (
+            "Jarvis Cyber est prêt en mode local. "
+            f"Demande reçue : « {message} ». "
+            f"{knowledge_hit_count} extrait(s) documentaire(s) pertinent(s) trouvé(s). "
+            "Le service IA distant est indisponible ou sans quota."
         )
 
     @staticmethod

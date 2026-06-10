@@ -1,3 +1,5 @@
+from openai import OpenAIError
+
 from jarvis_cyber.knowledge.store import SQLiteKnowledgeStore
 from jarvis_cyber.storage.database import Database
 
@@ -92,3 +94,21 @@ def test_knowledge_store_uses_semantic_search_when_embeddings_exist(monkeypatch,
 
     assert document.title == "VPN"
     assert results[0].search_mode == "semantic"
+
+
+def test_knowledge_store_falls_back_to_lexical_when_embeddings_fail(monkeypatch, tmp_path) -> None:
+    store = SQLiteKnowledgeStore(tmp_path, db=Database(tmp_path / "knowledge.db"))
+    store.add_document("user-a", "VPN", "Réinitialiser le tunnel sécurisé.", source="vpn.md")
+
+    class FailingEmbeddings:
+        @staticmethod
+        def create(**kwargs):
+            raise OpenAIError("quota unavailable")
+
+    fake_client = type("FakeClient", (), {"embeddings": FailingEmbeddings()})()
+    monkeypatch.setattr("jarvis_cyber.knowledge.store.embedding_service._client", fake_client)
+
+    results = store.search("user-a", "tunnel sécurisé", limit=3)
+
+    assert results
+    assert results[0].search_mode == "lexical"

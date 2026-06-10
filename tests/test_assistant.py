@@ -1,3 +1,5 @@
+from openai import OpenAIError
+
 from jarvis_cyber.core.schemas import KnowledgeSearchResult
 from jarvis_cyber.services.assistant import AssistantService
 
@@ -165,3 +167,44 @@ def test_assistant_executes_text_chat_tools(monkeypatch) -> None:
             {"role": "analyst", "source": "text_chat"},
         )
     ]
+
+
+def test_assistant_falls_back_locally_when_openai_is_unavailable(monkeypatch) -> None:
+    service = AssistantService()
+    monkeypatch.setattr("jarvis_cyber.services.assistant.memory_store.append", lambda **kwargs: None)
+    monkeypatch.setattr("jarvis_cyber.services.assistant.memory_store.recent", lambda **kwargs: [])
+    monkeypatch.setattr("jarvis_cyber.services.assistant.knowledge_store.search", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "jarvis_cyber.services.assistant.knowledge_store.chunks_for_results",
+        lambda user_id, results: [],
+    )
+    monkeypatch.setattr(
+        "jarvis_cyber.services.assistant.profile_store.prompt_context",
+        lambda user_id: "",
+    )
+    monkeypatch.setattr(
+        "jarvis_cyber.services.assistant.playbook_store.prompt_context",
+        lambda user_id, message: "",
+    )
+    monkeypatch.setattr(
+        "jarvis_cyber.services.assistant.inbox_store.summary_context",
+        lambda user_id: "",
+    )
+    monkeypatch.setattr(
+        "jarvis_cyber.services.assistant.connector_context_service.prompt_context",
+        lambda: "",
+    )
+    monkeypatch.setattr(
+        service,
+        "_respond_with_tools",
+        lambda **kwargs: (_ for _ in ()).throw(OpenAIError("quota unavailable")),
+    )
+
+    answer, _, used_remote_model, _, _ = service.respond(
+        "analyst-1",
+        "voice",
+        "Teste le mode vocal",
+    )
+
+    assert used_remote_model is False
+    assert "mode local" in answer.lower()

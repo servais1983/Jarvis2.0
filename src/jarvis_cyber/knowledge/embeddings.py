@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from math import sqrt
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 from jarvis_cyber.config import settings
 
@@ -33,7 +33,10 @@ class EmbeddingService:
         if settings.embedding_dimensions is not None:
             kwargs["dimensions"] = settings.embedding_dimensions
 
-        response = self._client.embeddings.create(**kwargs)
+        try:
+            response = self._client.embeddings.create(**kwargs)
+        except OpenAIError:
+            return []
         return [item.embedding for item in response.data]
 
     @staticmethod
