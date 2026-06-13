@@ -233,7 +233,8 @@ async def apply_security_headers(request: Request, call_next):
         "img-src 'self' data:; "
         "media-src 'self' blob:; "
         "script-src 'self'; "
-        "style-src 'self'; "
+        "style-src 'self' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
         "connect-src 'self' https://api.openai.com wss://api.openai.com"
     )
     if settings.hsts_enabled:

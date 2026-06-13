@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Callable, TypeVar
 
 from openai import OpenAI, OpenAIError
@@ -8,6 +9,8 @@ from jarvis_cyber.config import settings
 from jarvis_cyber.core.prompts import SYSTEM_PROMPT
 from jarvis_cyber.core.schemas import KnowledgeCitation, KnowledgeSearchResult
 from jarvis_cyber.knowledge.store import knowledge_store
+
+logger = logging.getLogger(__name__)
 from jarvis_cyber.inbox.store import inbox_store
 from jarvis_cyber.memory.store import memory_store
 from jarvis_cyber.playbooks.store import playbook_store
@@ -156,8 +159,9 @@ class AssistantService:
                     role=role,
                     source="text_chat",
                 )
-            except Exception:
-                result = {"error": "tool_execution_failed"}
+            except Exception as exc:
+                logger.error("Tool execution failed: %s — %s", call.name, exc, exc_info=True)
+                result = {"error": "tool_execution_failed", "tool": call.name}
             outputs.append(
                 {
                     "type": "function_call_output",

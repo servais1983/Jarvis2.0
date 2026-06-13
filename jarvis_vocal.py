@@ -15,6 +15,7 @@ Prérequis :
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
@@ -26,6 +27,16 @@ import webbrowser
 import requests
 import speech_recognition as sr
 import pyttsx3
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("jarvis_vocal.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger("jarvis_vocal")
 
 # ---------------------------------------------------------------------------
 # Configuration (modifiable ici ou via variables d'environnement)
@@ -125,12 +136,13 @@ def _call_openai(prompt: str) -> str:
 
         client = OpenAI(api_key=OPENAI_API_KEY)
         resp = client.chat.completions.create(
-            model="claude-haiku-4-5-20251001",
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
+            max_tokens=400,
         )
         return resp.choices[0].message.content or ""
     except Exception as exc:
+        logger.error("Erreur OpenAI fallback: %s", exc)
         return f"Erreur OpenAI : {exc}"
 
 
@@ -138,6 +150,7 @@ def ask_llm(prompt: str) -> str:
     """Interroge Ollama en priorité, puis OpenAI en fallback."""
     result = _call_ollama(prompt)
     if result is None:
+        logger.warning("Ollama indisponible — bascule vers OpenAI (gpt-4o-mini)")
         print("⚠️  Ollama indisponible, bascule vers OpenAI...")
         return _call_openai(prompt)
     return result
@@ -290,6 +303,7 @@ def ai_assistant(text: str) -> str:
     _conversation_history += f"\nJarvis: {response}"
     _last_interaction = time.time()
 
+    logger.info("Commande: %s | Réponse: %s...", text[:60], response[:80])
     speak(response)
     return response
 
@@ -318,6 +332,7 @@ def listen() -> str:
     except sr.UnknownValueError:
         return ""
     except sr.RequestError as exc:
+        logger.error("Erreur reconnaissance vocale : %s", exc)
         print(f"❌ Erreur reconnaissance vocale : {exc}")
         return ""
 
@@ -370,6 +385,7 @@ def main() -> None:
 
         # Priorité 2 : wake word
         if WAKE_WORD in command:
+            logger.info("Wake word détecté — commande: %s", command[:80])
             print(f"🔑 Wake word détecté.")
             response = ai_assistant(command)
             preview = response[:80] + "..." if len(response) > 80 else response

@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     )
 
     env: str = "development"
-    main_model: str = "gpt-5.4"
-    fast_model: str = "gpt-5.4-mini"
-    realtime_model: str = "gpt-realtime-mini"
+    main_model: str = "gpt-4o"
+    fast_model: str = "gpt-4o-mini"
+    realtime_model: str = "gpt-4o-realtime-preview"
     history_limit: int = 12
     memory_backend: str = "local"
     data_dir: str = "./data"

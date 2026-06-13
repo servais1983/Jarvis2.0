@@ -119,7 +119,7 @@
           </div>
           <form id="cve-form" class="stack">
             <label>Identifiant CVE
-              <input id="cve-id" placeholder="CVE-2021-44228" />
+              <input id="cve-id" placeholder="CVE-2021-44228" pattern="^CVE-\d{4}-\d{4,}$" title="Format attendu : CVE-AAAA-NNNNN" required />
             </label>
             <button type="submit">► ANALYSER</button>
           </form>
@@ -536,14 +536,14 @@
 
         <div class="auth-grid">
           <form id="login-form" class="stack">
-            <label>Email<input id="login-email" type="email" placeholder="toi@example.com" /></label>
-            <label>Mot de passe<input id="login-password" type="password" placeholder="••••••••" /></label>
+            <label>Email<input id="login-email" type="email" placeholder="toi@example.com" required autocomplete="email" /></label>
+            <label>Mot de passe<input id="login-password" type="password" placeholder="••••••••" required minlength="8" autocomplete="current-password" /></label>
             <label>Code MFA (si activé)<input id="login-mfa-code" inputmode="numeric" placeholder="123456" /></label>
             <button type="submit">► SE CONNECTER</button>
           </form>
           <form id="register-form" class="stack">
-            <label>Nouvel email<input id="register-email" type="email" placeholder="toi@example.com" /></label>
-            <label>Nouveau mot de passe<input id="register-password" type="password" placeholder="8 caractères minimum" /></label>
+            <label>Nouvel email<input id="register-email" type="email" placeholder="toi@example.com" required autocomplete="email" /></label>
+            <label>Nouveau mot de passe<input id="register-password" type="password" placeholder="8 caractères minimum" required minlength="8" autocomplete="new-password" /></label>
             <button type="submit">► CRÉER LE COMPTE</button>
           </form>
         </div>

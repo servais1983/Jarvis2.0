@@ -44,12 +44,15 @@ const JarvisOrb = (() => {
   let heights = new Float32Array(BARS);
 
   // Web Audio analyser for real mic data
-  let analyser = null;
-  let micData  = null;
-  let audioCtx = null;
-  let micStream = null;
+  let analyser   = null;
+  let micData    = null;
+  let audioCtx   = null;
+  let micStream  = null;
+  let micStarting = false;   // guard against concurrent calls
 
   async function startMic() {
+    if (micStarting || micStream) return;   // already running or starting
+    micStarting = true;
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
@@ -60,13 +63,15 @@ const JarvisOrb = (() => {
       micData = new Uint8Array(analyser.frequencyBinCount);
     } catch {
       // Mic permission denied — fall back to simulation
+    } finally {
+      micStarting = false;
     }
   }
 
   function stopMic() {
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (audioCtx)  { audioCtx.close().catch(() => {}); audioCtx = null; }
-    analyser = null; micData = null;
+    analyser = null; micData = null; micStarting = false;
   }
 
   const STATE_LABELS = {
@@ -84,8 +89,12 @@ const JarvisOrb = (() => {
     else stopMic();
   }
 
-  // ── Draw one frame ──
-  function draw() {
+  // ── Draw one frame — throttled to 30 FPS ──
+  let _lastFrame = 0;
+  function draw(ts = 0) {
+    requestAnimationFrame(draw);
+    if (ts - _lastFrame < 33) return;   // ~30 FPS cap
+    _lastFrame = ts;
     ctx.clearRect(0, 0, W, H);
     const t = performance.now() / 1000;
 
@@ -134,11 +143,9 @@ const JarvisOrb = (() => {
       ctx.lineCap     = 'round';
       ctx.stroke();
     }
-
-    requestAnimationFrame(draw);
   }
 
-  draw();
+  requestAnimationFrame(draw);
 
   return { setState };
 })();
