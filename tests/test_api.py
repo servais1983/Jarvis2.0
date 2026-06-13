@@ -39,7 +39,8 @@ def test_health() -> None:
 def test_index() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Jarvis Cyber" in response.text
+    # Page title changed to JARVIS in the Iron Man HUD redesign
+    assert "JARVIS" in response.text
 
 
 def test_chat() -> None:
