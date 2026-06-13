@@ -27,6 +27,12 @@ dev = [
   "pytest>=8.3.0",
   "ruff>=0.11.0",
 ]
+voice = [
+  "SpeechRecognition>=3.10.0",
+  "pyttsx3>=2.90",
+  "pyaudio>=0.2.14",
+  "requests>=2.31.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jarvis_cyber"]

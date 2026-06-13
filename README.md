@@ -5,24 +5,116 @@
 <h1 align="center">Jarvis Cyber</h1>
 
 <p align="center">
-  A secure AI-powered cybersecurity copilot for SOC operations, investigation workflows, and analyst productivity.
+  A secure AI-powered cybersecurity copilot for SOC operations — with a built-in local voice assistant for your PC.
 </p>
 
 <p align="center">
-  <strong>FastAPI</strong> · <strong>Local-first</strong> · <strong>SOC workflows</strong> · <strong>Microsoft security integrations</strong> · <strong>Human approval guardrails</strong>
+  <strong>FastAPI</strong> · <strong>Local-first</strong> · <strong>SOC workflows</strong> · <strong>Ollama (LLM local)</strong> · <strong>Assistant vocal</strong> · <strong>Microsoft security integrations</strong>
 </p>
 
 ---
 
 ## Overview
 
-Jarvis Cyber is a local-first cybersecurity assistant designed to behave like a capable SOC colleague: it helps analysts triage alerts, enrich investigations, organize evidence, draft reports, prioritize active cases, and prepare shift handovers.
+Jarvis Cyber est un assistant IA local conçu sur deux piliers :
 
-The project is built around one core principle:
+**1. Copilot cybersécurité (SOC)**
+Assistant SOC complet : triage d'alertes, enrichissement d'investigations, organisation des preuves, rédaction de rapports, priorisation des cas, et handover de shift.
 
 > Jarvis can recommend, organize, enrich, and draft — but sensitive actions stay explicit, visible, and analyst-controlled.
 
-It is intended for defensive security work, SOC operations, incident response preparation, vulnerability analysis, and investigation management.
+**2. Assistant vocal local pour PC**
+Un vrai Jarvis à la Iron Man : réveil par mot-clé, reconnaissance vocale, LLM local via Ollama (fonctionne sans internet), synthèse vocale hors-ligne, et commandes PC (navigateur, YouTube, recherche Google, applications...).
+
+> Dites "Jarvis" — il écoute, comprend, répond, et agit.
+
+---
+
+---
+
+## Assistant Vocal Local — Jarvis pour votre PC
+
+### Démarrage rapide (Windows)
+
+```bat
+start_vocal.bat
+```
+
+### Démarrage rapide (Linux / macOS)
+
+```bash
+./start_vocal.sh
+```
+
+> Les scripts créent automatiquement le `.venv`, installent les dépendances vocales, et lancent Jarvis.
+
+### Prérequis
+
+1. **Ollama** — moteur LLM local (fonctionne sans internet) :
+   - Télécharger : https://ollama.com
+   - Télécharger un modèle : `ollama pull deepseek-r1`
+   - Laisser Ollama tourner en arrière-plan pendant l'utilisation
+
+2. **PyAudio** — accès au microphone :
+   - Windows : `pip install pyaudio` (ou `pipwin install pyaudio` si problème)
+   - Ubuntu/Debian : `sudo apt install portaudio19-dev` puis `pip install pyaudio`
+   - macOS : `brew install portaudio` puis `pip install pyaudio`
+
+3. **Connexion internet pour la reconnaissance vocale** (Google Speech Recognition)
+
+### Installation manuelle
+
+```bash
+pip install -e ".[voice]"
+python jarvis_vocal.py
+```
+
+### Fonctionnalités vocales
+
+| Fonctionnalité | Détail |
+|---|---|
+| **Wake word** | Dites "Jarvis..." pour activer |
+| **Arrêt vocal** | "arrête", "tais-toi", "silence", "stop" |
+| **Reconnaissance vocale** | Google Speech Recognition (fr-FR) |
+| **LLM local** | Ollama — deepseek-r1 / llama3 / mistral (configurable) |
+| **Fallback** | OpenAI si Ollama n'est pas lancé |
+| **Synthèse vocale** | pyttsx3 — fonctionne 100% hors-ligne |
+| **Mémoire** | Historique conversation, reset après 3 min d'inactivité |
+| **Threading** | Jarvis parle sans bloquer l'écoute microphone |
+| **Commandes PC** | Voir tableau ci-dessous |
+
+### Commandes PC reconnues
+
+| Ce que vous dites | Action |
+|---|---|
+| "Jarvis, recherche [sujet]" | Ouvre Google avec la recherche |
+| "Jarvis, cherche [sujet] sur YouTube" | Lance une recherche YouTube |
+| "Jarvis, ouvre le navigateur" | Ouvre le navigateur par défaut |
+| "Jarvis, ouvre le gestionnaire de fichiers" | Ouvre l'explorateur de fichiers |
+| "Jarvis, ouvre le bloc-notes" | Ouvre l'éditeur de texte |
+| "Jarvis, ouvre la calculatrice" | Ouvre la calculatrice |
+| "Jarvis, météo" | Affiche la météo du jour (Google) |
+| "Jarvis, ouvre Spotify" | Ouvre Spotify |
+| "Jarvis, [n'importe quelle question]" | Répond via le LLM local |
+
+### Configuration assistant vocal
+
+Variables d'environnement (dans `.env`) :
+
+```env
+OLLAMA_URL=http://localhost:11434/api/generate
+OLLAMA_MODEL=deepseek-r1
+JARVIS_WAKE_WORD=jarvis
+JARVIS_LANG=fr-FR
+JARVIS_SPEECH_RATE=170
+```
+
+Pour changer de modèle Ollama (exemples) :
+```bash
+ollama pull llama3
+ollama pull mistral
+# puis dans .env : OLLAMA_MODEL=llama3
+```
 
 ---
 
@@ -97,7 +189,8 @@ Connector secrets can be supplied through environment variables or the internal 
 
 ```text
 Jarvis Cyber
-├── FastAPI backend
+├── jarvis_vocal.py          ← Assistant vocal standalone (Ollama + pyttsx3)
+├── FastAPI backend           ← Copilot cybersécurité (web)
 ├── Web UI
 ├── SQLite local persistence
 ├── Auth / MFA / RBAC / audit
@@ -111,25 +204,46 @@ Jarvis Cyber
 Main source tree:
 
 ```text
-src/jarvis_cyber/
-├── api/                    # FastAPI application and HTTP endpoints
-├── core/                   # Shared schemas and prompts
-├── services/               # Application logic and workflow orchestration
-├── integrations/           # External connector clients
-├── investigations/         # Persistent investigation cases
-├── investigation_profiles/ # Investigation templates and profiles
-├── knowledge/              # Document storage, extraction, embeddings
-├── approvals/              # Human approval store
-├── automations/            # Scheduled routines
-├── storage/                # SQLite database helper
-└── web/                    # Local web interface and static assets
+Jarvis2.0/
+├── jarvis_vocal.py          # Assistant vocal local (standalone)
+├── start_vocal.bat          # Démarrage Windows — assistant vocal
+├── start_vocal.sh           # Démarrage Linux/macOS — assistant vocal
+├── start.bat                # Démarrage Windows — interface web SOC
+└── src/jarvis_cyber/
+    ├── api/                 # FastAPI application and HTTP endpoints
+    ├── core/                # Shared schemas and prompts
+    ├── services/            # Application logic and workflow orchestration
+    ├── integrations/        # External connector clients
+    ├── investigations/      # Persistent investigation cases
+    ├── investigation_profiles/ # Investigation templates and profiles
+    ├── knowledge/           # Document storage, extraction, embeddings
+    ├── approvals/           # Human approval store
+    ├── automations/         # Scheduled routines
+    ├── storage/             # SQLite database helper
+    └── web/                 # Local web interface and static assets
 ```
 
 ---
 
 ## Quickstart
 
-### Windows automatic start
+Il y a deux modes de démarrage selon l'usage :
+
+| Mode | Script | Usage |
+|---|---|---|
+| **Assistant vocal PC** | `start_vocal.bat` / `start_vocal.sh` | Jarvis vocal local (Ollama) |
+| **Interface web SOC** | `start.bat` | Copilot cybersécurité (navigateur) |
+
+### Mode assistant vocal (Ollama)
+
+```bat
+start_vocal.bat
+```
+
+Prérequis : Ollama installé et `ollama pull deepseek-r1` exécuté.  
+Voir la section [Assistant Vocal Local](#assistant-vocal-local--jarvis-pour-votre-pc) ci-dessus.
+
+### Mode interface web SOC
 
 Double-click `start.bat`, or run:
 
@@ -400,6 +514,10 @@ __pycache__/
 
 Potential next steps:
 
+- Wake word local hors-ligne (Porcupine / Vosk — sans Google)
+- Whisper local pour la reconnaissance vocale 100% offline
+- Commandes PC avancées (contrôle volume, screenshots, domotique)
+- Interface Gradio pour l'assistant vocal
 - Production deployment profile
 - GitHub Actions CI
 - Docker packaging
@@ -408,7 +526,6 @@ Potential next steps:
 - Exportable incident report documents
 - Notification integrations
 - Fine-grained approval policies
-- Expanded voice-first SOC workflow
 
 ---
 
