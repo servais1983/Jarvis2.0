@@ -118,6 +118,30 @@ ollama pull mistral
 
 ---
 
+---
+
+## Interface — Iron Man HUD
+
+L'interface web reproduit l'esthétique des films Iron Man :
+
+| Élément | Description |
+|---|---|
+| **JARVIS Orb** | Sphère centrale animée, visible sur tous les onglets |
+| **Waveform circulaire** | Bars audio en temps réel via Web Audio API |
+| **4 états visuels** | Veille (bleu) · Écoute (vert) · Traitement (ambre) · Réponse (cyan vif) |
+| **Thème HUD** | Fond noir `#060a0f`, néons cyan, scanlines CRT, polices militaires |
+| **Panneaux glassmorphism** | Bordures lumineuses + crochets de coin sur chaque carte |
+| **Navigation 6 onglets** | JARVIS · ANALYSE · DOSSIERS · MÉMOIRE · ROUTINE · SYSTÈME |
+| **Effet glitch** | Animation glitch sur le logo JARVIS au chargement |
+| **Horloge temps réel** | Affichée en permanence dans le header |
+
+Fichiers de l'interface :
+- `src/jarvis_cyber/web/index.html` — structure HUD avec onglets
+- `src/jarvis_cyber/web/static/styles.css` — thème Iron Man complet
+- `src/jarvis_cyber/web/static/jarvis-fx.js` — orb, waveform, glitch, horloge
+
+---
+
 ## Key Capabilities
 
 ### AI Cyber Assistant
@@ -220,7 +244,12 @@ Jarvis2.0/
     ├── approvals/           # Human approval store
     ├── automations/         # Scheduled routines
     ├── storage/             # SQLite database helper
-    └── web/                 # Local web interface and static assets
+    └── web/
+        ├── index.html       # Interface HUD Iron Man (6 onglets)
+        └── static/
+            ├── styles.css   # Thème Iron Man complet
+            ├── jarvis-fx.js # Orb animé, waveform, glitch, horloge
+            └── app.js       # Logique métier et appels API
 ```
 
 ---
@@ -518,6 +547,8 @@ Potential next steps:
 - Whisper local pour la reconnaissance vocale 100% offline
 - Commandes PC avancées (contrôle volume, screenshots, domotique)
 - Interface Gradio pour l'assistant vocal
+- Visualisation 3D de l'orb (Three.js)
+- Thème HUD personnalisable (couleur primaire, vitesse animations)
 - Production deployment profile
 - GitHub Actions CI
 - Docker packaging
