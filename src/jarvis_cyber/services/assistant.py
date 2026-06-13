@@ -8,15 +8,15 @@ from pydantic import BaseModel
 from jarvis_cyber.config import settings
 from jarvis_cyber.core.prompts import SYSTEM_PROMPT
 from jarvis_cyber.core.schemas import KnowledgeCitation, KnowledgeSearchResult
-from jarvis_cyber.knowledge.store import knowledge_store
-
-logger = logging.getLogger(__name__)
 from jarvis_cyber.inbox.store import inbox_store
+from jarvis_cyber.knowledge.store import knowledge_store
 from jarvis_cyber.memory.store import memory_store
 from jarvis_cyber.playbooks.store import playbook_store
 from jarvis_cyber.profile.store import profile_store
 from jarvis_cyber.services.connector_context import connector_context_service
 from jarvis_cyber.services.tool_catalog import tool_catalog_service
+
+logger = logging.getLogger(__name__)
 
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)

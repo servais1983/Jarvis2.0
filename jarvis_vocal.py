@@ -386,7 +386,7 @@ def main() -> None:
         # Priorité 2 : wake word
         if WAKE_WORD in command:
             logger.info("Wake word détecté — commande: %s", command[:80])
-            print(f"🔑 Wake word détecté.")
+            print("🔑 Wake word détecté.")
             response = ai_assistant(command)
             preview = response[:80] + "..." if len(response) > 80 else response
             print(f"🤖 Jarvis : {preview}")

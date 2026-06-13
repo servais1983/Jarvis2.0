@@ -111,6 +111,16 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function errorMsg(error) {
+  if (!error) return "Erreur inconnue.";
+  try {
+    const parsed = JSON.parse(error.message);
+    return parsed.detail || parsed.message || error.message;
+  } catch {
+    return error.message || "Erreur inconnue.";
+  }
+}
+
 function list(items) {
   if (!items?.length) return "<p class=\"subtle\">Aucun élément.</p>";
   return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
@@ -840,10 +850,10 @@ function renderInvestigationCaseDetail(detail) {
         <select name="template_id">${sentinelTemplateOptions()}</select>
       </label>
       <label>
-        Param?tres du mod?le (JSON)
+        Paramètres du modèle (JSON)
         <textarea name="template_parameters" rows="3" placeholder='{"user_principal_name":"utilisateur@entreprise.com"}'></textarea>
       </label>
-      <button data-render-sentinel-template="${escapeHtml(investigationCase.case_id)}" type="button">Pr?remplir la requ?te KQL</button>
+      <button data-render-sentinel-template="${escapeHtml(investigationCase.case_id)}" type="button">Préremplir la requête KQL</button>
       <label>
         Enrichir avec Sentinel / KQL
         <textarea name="query" rows="4" placeholder="SigninLogs | where UserPrincipalName == 'utilisateur@entreprise.com' | take 10"></textarea>
@@ -852,7 +862,7 @@ function renderInvestigationCaseDetail(detail) {
         Timespan optionnel
         <input name="timespan" placeholder="PT24H" />
       </label>
-      <button type="submit">Ajouter les r?sultats KQL au dossier</button>
+      <button type="submit">Ajouter les résultats KQL au dossier</button>
     </form>
     <div class="subtle" data-investigation-sentinel-result="${escapeHtml(investigationCase.case_id)}"></div>
     <label>
@@ -1399,7 +1409,7 @@ function renderSessions(sessions = []) {
             <strong class="${session.current ? "session-current" : ""}">
               ${session.current ? "Session courante" : "Session active"}
             </strong>
-            <p>Cr??e le ${escapeHtml(session.created_at)}</p>
+            <p>Créée le ${escapeHtml(session.created_at)}</p>
             <p>Expire le ${escapeHtml(session.expires_at)}</p>
           </div>
           ${
@@ -1459,22 +1469,9 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
     authToken = data.token;
     sessionStorage.setItem("jarvis_auth_token", authToken);
     updateAuthUi(data.user);
-    await refreshProfile();
-    await refreshKnowledgeDocuments();
-    await refreshTaskProfiles();
-    await refreshPlaybooks();
-    await refreshInvestigationProfiles();
-    await refreshInvestigationProfileTemplates();
-    await refreshSentinelQueryTemplates();
-    await refreshInvestigationCases();
-    await refreshWatchlists();
-    await refreshAutomations();
-    await refreshInbox();
-    await refreshApprovals();
-    await refreshConnectorStatuses();
-    await refreshMfaStatus();
+    await refreshAllUserData();
   } catch (error) {
-    authMessage.textContent = "Connexion impossible.";
+    authMessage.textContent = errorMsg(error) || "Connexion impossible.";
   }
 });
 
@@ -1492,22 +1489,9 @@ document.querySelector("#register-form").addEventListener("submit", async (event
     authToken = data.token;
     sessionStorage.setItem("jarvis_auth_token", authToken);
     updateAuthUi(data.user);
-    await refreshProfile();
-    await refreshKnowledgeDocuments();
-    await refreshTaskProfiles();
-    await refreshPlaybooks();
-    await refreshInvestigationProfiles();
-    await refreshInvestigationProfileTemplates();
-    await refreshSentinelQueryTemplates();
-    await refreshInvestigationCases();
-    await refreshWatchlists();
-    await refreshAutomations();
-    await refreshInbox();
-    await refreshApprovals();
-    await refreshConnectorStatuses();
-    await refreshMfaStatus();
+    await refreshAllUserData();
   } catch (error) {
-    authMessage.textContent = "Création de compte impossible.";
+    authMessage.textContent = errorMsg(error) || "Création de compte impossible.";
   }
 });
 
@@ -1881,7 +1865,7 @@ sessionList.addEventListener("click", async (event) => {
     await request(`/auth/sessions/${button.dataset.sessionRevoke}`, { method: "DELETE" });
     await refreshSessions();
   } catch (error) {
-    authMessage.textContent = "Impossible de r?voquer la session.";
+    authMessage.textContent = errorMsg(error) || "Impossible de révoquer la session.";
   }
 });
 
@@ -2345,7 +2329,7 @@ investigationCaseDetail.addEventListener("click", async (event) => {
       form.querySelector('[name="query"]').value = data.query;
       form.querySelector('[name="timespan"]').value = data.timespan || "";
     } catch (error) {
-      investigationCaseDetail.innerHTML = `<p class="error">Impossible de pr?remplir la requ?te KQL. V?rifie les param?tres JSON.</p>`;
+      investigationCaseDetail.innerHTML = `<p class="error">Impossible de préremplir la requête KQL. Vérifiez les paramètres JSON.</p>`;
     }
     return;
   }
@@ -2873,9 +2857,7 @@ async function stopRealtimeSession() {
   voiceStatus.textContent = "Mode vocal arrêté.";
 }
 
-async function initializeApp() {
-  await hydrateStatus();
-  await hydrateCurrentUser();
+async function refreshAllUserData() {
   await refreshProfile();
   await refreshMfaStatus();
   await refreshKnowledgeDocuments();
@@ -2885,13 +2867,19 @@ async function initializeApp() {
   await refreshInvestigationProfileTemplates();
   await refreshSentinelQueryTemplates();
   await refreshInvestigationCases();
-  await refreshShiftBrief();
-  await refreshSLAWatch();
   await refreshWatchlists();
   await refreshAutomations();
   await refreshInbox();
   await refreshApprovals();
   await refreshConnectorStatuses();
+}
+
+async function initializeApp() {
+  await hydrateStatus();
+  await hydrateCurrentUser();
+  await refreshAllUserData();
+  await refreshShiftBrief();
+  await refreshSLAWatch();
 }
 
 initializeApp();

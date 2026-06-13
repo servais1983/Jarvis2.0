@@ -17,6 +17,9 @@ from jarvis_cyber.knowledge.embeddings import embedding_service
 from jarvis_cyber.storage.database import Database, database
 
 
+MAX_DOCUMENT_SIZE = 500_000  # bytes — rejects documents larger than ~500 KB
+
+
 class SQLiteKnowledgeStore:
     """Durable local knowledge store backed by SQLite."""
 
@@ -43,6 +46,10 @@ class SQLiteKnowledgeStore:
         content: str,
         source: str | None = None,
     ) -> KnowledgeDocument:
+        if len(content.encode()) > MAX_DOCUMENT_SIZE:
+            raise ValueError(
+                f"Document exceeds maximum size of {MAX_DOCUMENT_SIZE // 1000} KB."
+            )
         normalized_content = self._normalize_content(content)
         content_hash = self._hash_content(normalized_content)
         existing = self.find_by_hash(user_id, content_hash)
