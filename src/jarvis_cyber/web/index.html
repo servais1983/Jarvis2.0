@@ -4,80 +4,103 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JARVIS</title>
+  <link rel="icon" href="/static/brand/logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
+
+<!-- Fond réseau neuronal plein écran -->
+<canvas id="neural-bg"></canvas>
+
 <div class="hud-shell">
 
   <!-- ═══════════════════════════════════════
-       HEADER
+       BARRE SUPÉRIEURE — statut / heure / accueil
   ════════════════════════════════════════ -->
-  <header class="hud-header">
-    <div class="hud-brand">
-      <!-- Arc-reactor mini icon -->
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="14" stroke="rgba(0,212,255,0.5)" stroke-width="1"/>
-        <circle cx="16" cy="16" r="10" stroke="rgba(0,212,255,0.35)" stroke-width="1" stroke-dasharray="3 2"/>
-        <circle cx="16" cy="16" r="6"  fill="rgba(0,100,180,0.6)"    stroke="rgba(0,212,255,0.8)" stroke-width="1.5"/>
-        <circle cx="16" cy="16" r="2.5" fill="#00d4ff"/>
-      </svg>
-      <div>
-        <div class="hud-brand-name">JARVIS</div>
-        <div class="hud-brand-sub">v2.0 · CYBER &amp; VOCAL</div>
+  <header class="hud-top">
+
+    <div class="status-cluster">
+      <div class="sc-timeline">
+        <span class="sc-time" id="hud-time">--:--</span>
+        <span class="sc-sep"></span>
+        <span class="sc-date" id="hud-date">—</span>
       </div>
-    </div>
-    <div class="hud-meta">
-      <div class="hud-online">
-        <div class="status-dot"></div>
+      <div class="sc-greeting" id="hud-greeting">Bonsoir.</div>
+      <div class="sc-fact" id="hud-fact"></div>
+      <div class="sc-status">
+        <span class="status-dot"></span>
         <span id="runtime-status">CONNEXION…</span>
       </div>
-      <div class="hud-clock" id="hud-time">--:--:--</div>
+      <div class="sc-chips">
+        <span class="sc-chip">⬡ LOCAL</span>
+        <span class="sc-chip">◉ VOIX</span>
+        <span class="sc-chip">⬢ SOC</span>
+      </div>
+    </div>
+
+    <div class="hud-brand">
+      <div class="hud-brand-name">J.A.R.V.I.S.</div>
+      <div class="hud-brand-sub">SYSTÈME EN LIGNE · v2.0</div>
+    </div>
+
+    <div class="hud-top-actions">
+      <button id="new-chat-button" type="button" class="ghost-pill">+ NOUVELLE SESSION</button>
     </div>
   </header>
 
   <!-- ═══════════════════════════════════════
-       JARVIS ORB — visible on all tabs
+       SCÈNE CENTRALE — orb + nœuds d'agents
   ════════════════════════════════════════ -->
-  <div class="jarvis-core">
-    <div class="jarvis-orb-wrap" id="jarvis-orb" data-state="idle">
-      <canvas id="jarvis-canvas"></canvas>
-      <div class="orb-ring orb-ring-1"></div>
-      <div class="orb-ring orb-ring-2"></div>
-      <div class="orb-ring orb-ring-3"></div>
-      <div class="orb-center">J</div>
+  <main class="command-stage" id="command-stage">
+
+    <svg id="agent-links" aria-hidden="true"></svg>
+    <div id="agent-nodes"></div>
+
+    <div class="jarvis-core">
+      <div class="jarvis-orb-wrap" id="jarvis-orb" data-state="idle">
+        <canvas id="jarvis-canvas"></canvas>
+      </div>
     </div>
-    <div class="jarvis-state-label" id="jarvis-state-label">EN VEILLE</div>
+
+    <!-- Dock inférieur : contrôles + waveform -->
+    <div class="hud-dock">
+      <div class="dock-pills">
+        <button id="dock-chat" type="button" class="dock-pill">💬 CHAT</button>
+        <button id="dock-voice" type="button" class="dock-pill dock-pill-voice">🎙 VOIX</button>
+      </div>
+      <canvas id="wave-canvas" width="260" height="40"></canvas>
+      <div class="jarvis-state-label" id="jarvis-state-label">EN VEILLE</div>
+    </div>
+
+    <button id="modes-button" type="button" class="ghost-pill modes-button">◈ MODES</button>
+
+    <!-- Fallback mobile : accès rapide aux modules -->
+    <div class="mobile-agent-grid" id="mobile-agent-grid"></div>
+  </main>
+
+  <!-- ═══════════════════════════════════════
+       MENU MODES
+  ════════════════════════════════════════ -->
+  <div class="modes-menu hidden" id="modes-menu">
+    <div class="modes-menu-inner">
+      <div class="modes-menu-title">MODULES</div>
+      <div class="modes-menu-grid" id="modes-menu-grid"></div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════
-       NAVIGATION
+       FENÊTRES HUD (anciens onglets → overlays)
   ════════════════════════════════════════ -->
-  <nav class="hud-nav">
-    <button class="nav-tab active" data-tab="chat">⬡ JARVIS</button>
-    <button class="nav-tab"        data-tab="analyse">◈ ANALYSE</button>
-    <button class="nav-tab"        data-tab="dossiers">⬢ DOSSIERS</button>
-    <button class="nav-tab"        data-tab="memoire">◉ MÉMOIRE</button>
-    <button class="nav-tab"        data-tab="routine">⌚ ROUTINE</button>
-    <button class="nav-tab"        data-tab="systeme">⚙ SYSTÈME</button>
-  </nav>
+  <div id="overlay-root">
+    <div class="overlay-backdrop hidden" id="overlay-backdrop"></div>
 
-  <!-- ═══════════════════════════════════════
-       TAB PANELS
-  ════════════════════════════════════════ -->
-  <div class="tab-panels">
-
-    <!-- ─────────────────────────────────────
-         TAB 1 · JARVIS  (Chat + Voice)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel active" id="tab-chat">
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div>
-            <p class="eyebrow">Conversation</p>
-            <h2>Parler à Jarvis</h2>
-          </div>
-        </div>
-
+    <!-- ── CHAT ─────────────────────────────── -->
+    <section class="hud-window hidden" id="win-chat" data-title="Conversation">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Conversation</p><h2>Parler à Jarvis</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <div id="chat-log" class="chat-log">
           <div class="message assistant">
             <span>Jarvis</span>
@@ -103,56 +126,55 @@
           <p id="voice-status" class="subtle">VOIX INACTIVE</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- ─────────────────────────────────────
-         TAB 2 · ANALYSE  (CVE + Triage + Investigation)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel" id="tab-analyse">
+    <!-- ── ANALYSE CVE ──────────────────────── -->
+    <section class="hud-window hidden" id="win-cve" data-title="Analyse CVE">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Recherche</p><h2>Analyse CVE</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
+        <form id="cve-form" class="stack">
+          <label>Identifiant CVE
+            <input id="cve-id" placeholder="CVE-2021-44228" pattern="^CVE-\d{4}-\d{4,}$" title="Format attendu : CVE-AAAA-NNNNN" required />
+          </label>
+          <button type="submit">► ANALYSER</button>
+        </form>
+        <div id="cve-result" class="result empty">Aucune analyse lancée.</div>
+      </div>
+    </section>
 
-      <div class="grid-2">
+    <!-- ── TRIAGE ───────────────────────────── -->
+    <section class="hud-window hidden" id="win-triage" data-title="Triage d'alerte">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Analyste</p><h2>Triage d'alerte</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
+        <form id="alert-form" class="stack">
+          <label>Titre
+            <input id="alert-title" placeholder="Impossible travel" />
+          </label>
+          <label>Alerte brute
+            <textarea id="alert-raw" rows="3" placeholder="Login from Brussels followed by login from Tokyo in 4 minutes."></textarea>
+          </label>
+          <label>Contexte
+            <textarea id="alert-context" rows="2" placeholder="Utilisateur non connu pour voyager."></textarea>
+          </label>
+          <button type="submit">► TRIER</button>
+        </form>
+        <div id="alert-result" class="result empty">Aucun triage lancé.</div>
+      </div>
+    </section>
 
-        <!-- CVE -->
-        <div class="hud-card">
-          <div class="hud-card-header">
-            <div><p class="eyebrow">Workflow 01</p><h2>Analyse CVE</h2></div>
-          </div>
-          <form id="cve-form" class="stack">
-            <label>Identifiant CVE
-              <input id="cve-id" placeholder="CVE-2021-44228" pattern="^CVE-\d{4}-\d{4,}$" title="Format attendu : CVE-AAAA-NNNNN" required />
-            </label>
-            <button type="submit">► ANALYSER</button>
-          </form>
-          <div id="cve-result" class="result empty">Aucune analyse lancée.</div>
-        </div>
-
-        <!-- Alert triage -->
-        <div class="hud-card">
-          <div class="hud-card-header">
-            <div><p class="eyebrow">Workflow 02</p><h2>Triage d'alerte</h2></div>
-          </div>
-          <form id="alert-form" class="stack">
-            <label>Titre
-              <input id="alert-title" placeholder="Impossible travel" />
-            </label>
-            <label>Alerte brute
-              <textarea id="alert-raw" rows="3" placeholder="Login from Brussels followed by login from Tokyo in 4 minutes."></textarea>
-            </label>
-            <label>Contexte
-              <textarea id="alert-context" rows="2" placeholder="Utilisateur non connu pour voyager."></textarea>
-            </label>
-            <button type="submit">► TRIER</button>
-          </form>
-          <div id="alert-result" class="result empty">Aucun triage lancé.</div>
-        </div>
-
-      </div><!-- /grid-2 -->
-
-      <!-- Investigation guidée -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Workflow 03</p><h2>Investigation guidée</h2></div>
-        </div>
+    <!-- ── INVESTIGATION ────────────────────── -->
+    <section class="hud-window hidden" id="win-investigation" data-title="Investigation">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Enquête</p><h2>Investigation guidée</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <form id="investigation-form" class="stack">
           <div class="two-column-form">
             <label>Titre
@@ -187,12 +209,15 @@
         </form>
         <div id="investigation-result" class="result empty">Aucune investigation lancée.</div>
       </div>
+    </section>
 
-      <!-- Rapport d'incident -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Workflow 04</p><h2>Rapport d'incident</h2></div>
-        </div>
+    <!-- ── RAPPORT ──────────────────────────── -->
+    <section class="hud-window hidden" id="win-rapport" data-title="Rapport">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Rédacteur</p><h2>Rapport d'incident</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <form id="incident-form" class="stack">
           <label>Résumé
             <textarea id="incident-summary" rows="3" placeholder="Suspicious PowerShell execution…"></textarea>
@@ -207,65 +232,58 @@
         </form>
         <div id="incident-result" class="result empty">Aucun brouillon généré.</div>
       </div>
+    </section>
 
-    </div><!-- /tab-analyse -->
-
-    <!-- ─────────────────────────────────────
-         TAB 3 · DOSSIERS  (Cases + SOC queue)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel" id="tab-dossiers">
-
-      <div class="grid-2">
-
-        <!-- Shift brief + SLA -->
-        <div class="hud-card">
-          <div class="panel-heading compact-heading">
-            <div><p class="eyebrow">Mode quart SOC</p><h2>Brief opérationnel</h2></div>
-            <button id="refresh-shift-brief" type="button" class="secondary-button">GÉNÉRER</button>
-          </div>
-          <div id="shift-brief-result" class="result empty">Aucun brief de quart généré.</div>
-
-          <div class="panel-heading compact-heading" style="margin-top:16px">
-            <div><p class="eyebrow">Timers SOC</p><h2>SLA &amp; vieillissement</h2></div>
-            <button id="refresh-sla-watch" type="button" class="secondary-button">VÉRIFIER</button>
-          </div>
-          <div id="sla-watch-result" class="result empty">Aucun contrôle SLA généré.</div>
-        </div>
-
-        <!-- SOC queue -->
-        <div class="hud-card">
-          <div class="panel-heading compact-heading">
-            <div><p class="eyebrow">Priorisation SOC</p><h2>File de travail</h2></div>
-            <button id="refresh-soc-queue" type="button" class="secondary-button">ACTUALISER</button>
-          </div>
-          <div id="soc-queue-list" class="method-list empty">Aucune priorité SOC chargée.</div>
-        </div>
-
+    <!-- ── DOSSIERS / SOC ───────────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-dossiers" data-title="Dossiers SOC">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Suivi</p><h2>Dossiers &amp; file SOC</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
       </div>
+      <div class="hud-window-body">
+        <div class="grid-2">
+          <div class="hud-card">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Mode quart SOC</p><h2>Brief opérationnel</h2></div>
+              <button id="refresh-shift-brief" type="button" class="secondary-button">GÉNÉRER</button>
+            </div>
+            <div id="shift-brief-result" class="result empty">Aucun brief de quart généré.</div>
 
-      <!-- Case list & detail -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Suivi</p><h2>Dossiers d'investigation</h2></div>
+            <div class="panel-heading compact-heading heading-spaced">
+              <div><p class="eyebrow">Timers SOC</p><h2>SLA &amp; vieillissement</h2></div>
+              <button id="refresh-sla-watch" type="button" class="secondary-button">VÉRIFIER</button>
+            </div>
+            <div id="sla-watch-result" class="result empty">Aucun contrôle SLA généré.</div>
+          </div>
+
+          <div class="hud-card">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Priorisation SOC</p><h2>File de travail</h2></div>
+              <button id="refresh-soc-queue" type="button" class="secondary-button">ACTUALISER</button>
+            </div>
+            <div id="soc-queue-list" class="method-list empty">Aucune priorité SOC chargée.</div>
+          </div>
         </div>
-        <div class="dual-panel-grid">
-          <div id="investigation-case-list"   class="method-list empty">Aucun dossier d'investigation ouvert.</div>
-          <div id="investigation-case-detail" class="result empty">Lance une investigation puis crée un dossier pour suivre l'avancement.</div>
+
+        <div class="hud-card">
+          <div class="hud-card-header">
+            <div><p class="eyebrow">Suivi</p><h2>Dossiers d'investigation</h2></div>
+          </div>
+          <div class="dual-panel-grid">
+            <div id="investigation-case-list"   class="method-list empty">Aucun dossier d'investigation ouvert.</div>
+            <div id="investigation-case-detail" class="result empty">Lance une investigation puis crée un dossier pour suivre l'avancement.</div>
+          </div>
         </div>
       </div>
+    </section>
 
-    </div><!-- /tab-dossiers -->
-
-    <!-- ─────────────────────────────────────
-         TAB 4 · MÉMOIRE  (Knowledge + Playbooks + Profiles)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel" id="tab-memoire">
-
-      <!-- Knowledge base -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Mémoire</p><h2>Base documentaire</h2></div>
-        </div>
+    <!-- ── MÉMOIRE ──────────────────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-memoire" data-title="Mémoire">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Mémoire</p><h2>Base documentaire</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <div class="grid-2">
           <form id="knowledge-form" class="stack">
             <label>Titre<input id="knowledge-title" placeholder="Playbook phishing" /></label>
@@ -292,14 +310,16 @@
           <div id="knowledge-list" class="document-list empty">Aucun document chargé.</div>
         </div>
       </div>
+    </section>
 
-      <!-- Playbooks + Task profiles -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Méthodes</p><h2>Profils de tâches &amp; playbooks</h2></div>
-        </div>
+    <!-- ── MÉTHODES ─────────────────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-methodes" data-title="Playbooks">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Méthodes</p><h2>Profils de tâches &amp; playbooks</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <div class="dual-panel-grid">
-
           <section>
             <div class="panel-heading compact-heading">
               <div><p class="eyebrow">Format</p><h2>Profil de tâche</h2></div>
@@ -331,52 +351,45 @@
             </form>
             <div id="playbook-list" class="method-list empty">Aucun playbook chargé.</div>
           </section>
+        </div>
 
+        <div class="hud-card card-spaced">
+          <div class="hud-card-header">
+            <div><p class="eyebrow">Méthodes</p><h2>Profils d'investigation</h2></div>
+          </div>
+          <div class="dual-panel-grid">
+            <form id="investigation-profile-form" class="stack">
+              <label>Modèle prêt à l'emploi
+                <select id="investigation-profile-template"><option value="">Choisir un modèle</option></select>
+              </label>
+              <button id="prefill-investigation-profile-template" class="secondary-action" type="button">PRÉREMPLIR DEPUIS LE MODÈLE</button>
+              <label>Nom<input id="investigation-profile-name" placeholder="Compromission de compte" /></label>
+              <label>Description<textarea id="investigation-profile-description" rows="2" placeholder="À utiliser pour les alertes de connexion suspecte."></textarea></label>
+              <label>Déclencheurs / mots-clés<input id="investigation-profile-triggers" placeholder="impossible travel, compte compromis" /></label>
+              <label>Objectif par défaut<textarea id="investigation-profile-goal" rows="2" placeholder="Qualifier la compromission et décider d'une escalade."></textarea></label>
+              <label>Checklist recommandée<textarea id="investigation-profile-checks" rows="3" placeholder="Vérifier les connexions impossibles&#10;Contrôler les changements MFA&#10;Comparer avec l'activité habituelle"></textarea></label>
+              <label>Requête Drive par défaut<input id="investigation-profile-drive-query" placeholder="name contains 'identity'" /></label>
+              <label>Requête Jira par défaut<input id="investigation-profile-jira-jql" placeholder="project = SEC AND labels = identity" /></label>
+              <label class="inline-check">
+                <input id="investigation-profile-github" type="checkbox" />
+                Inclure les dépôts GitHub récents
+              </label>
+              <button type="submit">► AJOUTER LE PROFIL</button>
+            </form>
+            <div id="investigation-profile-list" class="method-list empty">Aucun profil d'investigation chargé.</div>
+          </div>
         </div>
       </div>
+    </section>
 
-      <!-- Investigation profiles -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Méthodes</p><h2>Profils d'investigation</h2></div>
-        </div>
-        <div class="dual-panel-grid">
-          <form id="investigation-profile-form" class="stack">
-            <label>Modèle prêt à l'emploi
-              <select id="investigation-profile-template"><option value="">Choisir un modèle</option></select>
-            </label>
-            <button id="prefill-investigation-profile-template" class="secondary-action" type="button">PRÉREMPLIR DEPUIS LE MODÈLE</button>
-            <label>Nom<input id="investigation-profile-name" placeholder="Compromission de compte" /></label>
-            <label>Description<textarea id="investigation-profile-description" rows="2" placeholder="À utiliser pour les alertes de connexion suspecte."></textarea></label>
-            <label>Déclencheurs / mots-clés<input id="investigation-profile-triggers" placeholder="impossible travel, compte compromis" /></label>
-            <label>Objectif par défaut<textarea id="investigation-profile-goal" rows="2" placeholder="Qualifier la compromission et décider d'une escalade."></textarea></label>
-            <label>Checklist recommandée<textarea id="investigation-profile-checks" rows="3" placeholder="Vérifier les connexions impossibles&#10;Contrôler les changements MFA&#10;Comparer avec l'activité habituelle"></textarea></label>
-            <label>Requête Drive par défaut<input id="investigation-profile-drive-query" placeholder="name contains 'identity'" /></label>
-            <label>Requête Jira par défaut<input id="investigation-profile-jira-jql" placeholder="project = SEC AND labels = identity" /></label>
-            <label class="inline-check">
-              <input id="investigation-profile-github" type="checkbox" />
-              Inclure les dépôts GitHub récents
-            </label>
-            <button type="submit">► AJOUTER LE PROFIL</button>
-          </form>
-          <div id="investigation-profile-list" class="method-list empty">Aucun profil d'investigation chargé.</div>
-        </div>
+    <!-- ── VEILLE ───────────────────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-veille" data-title="Veille CVE">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Vigie</p><h2>Watchlists &amp; brief quotidien</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
       </div>
-
-    </div><!-- /tab-memoire -->
-
-    <!-- ─────────────────────────────────────
-         TAB 5 · ROUTINE  (Watchlists + Automations + Inbox + Approvals)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel" id="tab-routine">
-
-      <!-- Watchlists + Daily brief -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Routine</p><h2>Watchlists &amp; brief quotidien</h2></div>
-        </div>
+      <div class="hud-window-body">
         <div class="dual-panel-grid">
-
           <section>
             <div class="panel-heading compact-heading">
               <div><p class="eyebrow">Surveillance</p><h2>Listes suivies</h2></div>
@@ -406,15 +419,17 @@
             </form>
             <div id="daily-brief-result" class="result empty">Aucun brief généré.</div>
           </section>
-
         </div>
       </div>
+    </section>
 
-      <!-- Automations -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Automatisation</p><h2>Routines planifiées</h2></div>
-        </div>
+    <!-- ── ROUTINES ─────────────────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-routines" data-title="Routines">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Automatisation</p><h2>Routines planifiées</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <div class="dual-panel-grid">
           <section>
             <div class="panel-heading compact-heading">
@@ -445,56 +460,57 @@
           </section>
         </div>
       </div>
+    </section>
 
-      <div class="grid-2">
-
-        <!-- Inbox -->
-        <div class="hud-card">
-          <div class="hud-card-header">
-            <div><p class="eyebrow">Inbox</p><h2>Livrables récents</h2></div>
-          </div>
-          <div class="inbox-actions">
-            <button id="refresh-inbox" type="button" class="secondary-button">ACTUALISER</button>
-          </div>
-          <div id="inbox-list" class="method-list empty">Aucun élément dans l'inbox.</div>
-        </div>
-
-        <!-- Approvals -->
-        <div class="hud-card">
-          <div class="hud-card-header">
-            <div><p class="eyebrow">Contrôle humain</p><h2>Demandes d'approbation</h2></div>
-          </div>
-          <div class="inbox-actions">
-            <button id="refresh-approvals" type="button" class="secondary-button">ACTUALISER</button>
-          </div>
-          <div id="approval-list" class="method-list empty">Aucune demande d'approbation chargée.</div>
-        </div>
-
+    <!-- ── INBOX ────────────────────────────── -->
+    <section class="hud-window hidden" id="win-inbox" data-title="Inbox">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Inbox</p><h2>Livrables récents</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
       </div>
-
-    </div><!-- /tab-routine -->
-
-    <!-- ─────────────────────────────────────
-         TAB 6 · SYSTÈME  (Connectors + Profile + Auth/MFA)
-    ──────────────────────────────────────── -->
-    <div class="tab-panel" id="tab-systeme">
-
-      <!-- Connectors -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Connecteurs</p><h2>Sources externes</h2></div>
+      <div class="hud-window-body">
+        <div class="inbox-actions">
+          <button id="refresh-inbox" type="button" class="secondary-button">ACTUALISER</button>
         </div>
+        <div id="inbox-list" class="method-list empty">Aucun élément dans l'inbox.</div>
+      </div>
+    </section>
+
+    <!-- ── APPROBATIONS ─────────────────────── -->
+    <section class="hud-window hidden" id="win-approbations" data-title="Approbations">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Contrôle humain</p><h2>Demandes d'approbation</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
+        <div class="inbox-actions">
+          <button id="refresh-approvals" type="button" class="secondary-button">ACTUALISER</button>
+        </div>
+        <div id="approval-list" class="method-list empty">Aucune demande d'approbation chargée.</div>
+      </div>
+    </section>
+
+    <!-- ── CONNECTEURS ──────────────────────── -->
+    <section class="hud-window hidden" id="win-connecteurs" data-title="Connecteurs">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Connecteurs</p><h2>Sources externes</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <div id="connector-status-list" class="method-list empty">Aucun statut chargé.</div>
       </div>
+    </section>
 
-      <!-- Profile -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Profil</p><h2>Ton contexte de travail</h2></div>
-        </div>
+    <!-- ── PROFIL ───────────────────────────── -->
+    <section class="hud-window hidden" id="win-profil" data-title="Profil">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Profil</p><h2>Ton contexte de travail</h2></div>
+        <button type="button" class="win-close" data-close>✕</button>
+      </div>
+      <div class="hud-window-body">
         <form id="profile-form" class="stack">
           <div class="two-column-form">
-            <label>Nom affiché<input id="profile-display-name" placeholder="Stéphane" /></label>
+            <label>Nom affiché<input id="profile-display-name" placeholder="Steve" /></label>
             <label>Fonction<input id="profile-job-title" placeholder="Analyste SOC" /></label>
             <label>Organisation<input id="profile-organization" placeholder="Entreprise / équipe" /></label>
             <label>Fuseau horaire<input id="profile-timezone" placeholder="Europe/Brussels" /></label>
@@ -526,14 +542,18 @@
           </div>
         </form>
       </div>
+    </section>
 
-      <!-- Auth / MFA / Admin -->
-      <div class="hud-card">
-        <div class="hud-card-header">
-          <div><p class="eyebrow">Identité</p><h2>Connexion</h2></div>
+    <!-- ── SÉCURITÉ / IDENTITÉ ──────────────── -->
+    <section class="hud-window hud-window-wide hidden" id="win-securite" data-title="Sécurité">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Identité</p><h2>Connexion</h2></div>
+        <div class="win-head-right">
           <div id="auth-status" class="auth-chip">VÉRIFICATION…</div>
+          <button type="button" class="win-close" data-close>✕</button>
         </div>
-
+      </div>
+      <div class="hud-window-body">
         <div class="auth-grid">
           <form id="login-form" class="stack">
             <label>Email<input id="login-email" type="email" placeholder="toi@example.com" required autocomplete="email" /></label>
@@ -553,7 +573,6 @@
           <button id="logout-button" type="button" class="secondary-button">SE DÉCONNECTER</button>
         </div>
 
-        <!-- Sessions -->
         <div id="session-console" class="session-console hidden">
           <div class="panel-heading compact-heading">
             <div><p class="eyebrow">Sécurité</p><h2>Sessions actives</h2></div>
@@ -561,7 +580,6 @@
           <div id="session-list" class="session-list empty">Aucune session active chargée.</div>
         </div>
 
-        <!-- MFA -->
         <div id="mfa-console" class="session-console hidden">
           <div class="panel-heading compact-heading">
             <div><p class="eyebrow">Sécurité</p><h2>Authentification MFA</h2></div>
@@ -595,7 +613,6 @@
           </div>
         </div>
 
-        <!-- Admin -->
         <div id="admin-console" class="admin-console hidden">
           <div class="panel-heading compact-heading audit-heading">
             <div><p class="eyebrow">Administration</p><h2>Utilisateurs</h2></div>
@@ -612,12 +629,10 @@
           </form>
           <div id="audit-event-list" class="audit-event-list empty">Aucun événement chargé.</div>
         </div>
+      </div>
+    </section>
 
-      </div><!-- /auth card -->
-
-    </div><!-- /tab-systeme -->
-
-  </div><!-- /tab-panels -->
+  </div><!-- /overlay-root -->
 </div><!-- /hud-shell -->
 
 <script src="/static/app.js"></script>

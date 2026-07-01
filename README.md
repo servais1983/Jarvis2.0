@@ -105,6 +105,7 @@ Variables d'environnement (dans `.env`) :
 OLLAMA_URL=http://localhost:11434/api/generate
 OLLAMA_MODEL=deepseek-r1
 JARVIS_WAKE_WORD=jarvis
+JARVIS_USER_NAME=Steve
 JARVIS_LANG=fr-FR
 JARVIS_SPEECH_RATE=170
 ```
@@ -120,25 +121,27 @@ ollama pull mistral
 
 ---
 
-## Interface — Iron Man HUD
+## Interface — Neural Command Center (Dark Knight edition)
 
-L'interface web reproduit l'esthétique des films Iron Man :
+L'interface web est un centre de commande plein écran, noir profond façon DC Comics — bleu acier et or sur fond gothique :
 
 | Élément | Description |
 |---|---|
-| **JARVIS Orb** | Sphère centrale animée, visible sur tous les onglets |
-| **Waveform circulaire** | Bars audio en temps réel via Web Audio API |
-| **4 états visuels** | Veille (bleu) · Écoute (vert) · Traitement (ambre) · Réponse (cyan vif) |
-| **Thème HUD** | Fond noir `#060a0f`, néons cyan, scanlines CRT, polices militaires |
-| **Panneaux glassmorphism** | Bordures lumineuses + crochets de coin sur chaque carte |
-| **Navigation 6 onglets** | JARVIS · ANALYSE · DOSSIERS · MÉMOIRE · ROUTINE · SYSTÈME |
-| **Effet glitch** | Animation glitch sur le logo JARVIS au chargement |
-| **Horloge temps réel** | Affichée en permanence dans le header |
+| **Orb central 3D** | Sphère de ~600 particules bleu acier en rotation, cerclée d'un anneau doré lumineux — cliquer l'orb ouvre la conversation |
+| **Réseau d'agents** | 14 nœuds cliquables (Analyste, Chercheur CVE, Investigateur, Mémoire, Playbooks…) reliés à l'orb par des lignes de circuit |
+| **Compteurs live** | Badges dorés en temps réel sur les nœuds : dossiers ouverts, approbations en attente, inbox, documents, playbooks, watchlists, connecteurs configurés |
+| **Commandes rapides** | Taper « ouvre les dossiers », « affiche l'inbox », « lance une investigation »… dans le chat ouvre directement le module |
+| **Fond neuronal** | Constellation de particules animées reliées entre elles, plein écran |
+| **Waveform "en écoute"** | Barres audio temps réel (Web Audio API) sous le dock, façon assistant vocal |
+| **4 états visuels** | Veille (bleu/or) · Écoute (vert) · Traitement (ambre) · Réponse (bleu glacé) |
+| **Cluster de statut** | Horloge, date, accueil personnalisé (« Bonsoir, Steve. »), éphéméride cyber, état système, badges LOCAL/VOIX/SOC |
+| **Fenêtres HUD** | Chaque module s'ouvre en overlay (nœud, dock CHAT/VOIX, ou menu MODES) |
+| **Mobile** | Orb plein écran + grille de modules avec badges, dock fixé en bas |
 
 Fichiers de l'interface :
-- `src/jarvis_cyber/web/index.html` — structure HUD avec onglets
-- `src/jarvis_cyber/web/static/styles.css` — thème Iron Man complet
-- `src/jarvis_cyber/web/static/jarvis-fx.js` — orb, waveform, glitch, horloge
+- `src/jarvis_cyber/web/index.html` — scène centrale + fenêtres HUD des modules
+- `src/jarvis_cyber/web/static/styles.css` — thème neural command center complet
+- `src/jarvis_cyber/web/static/jarvis-fx.js` — orb à particules, réseau d'agents, waveform, fenêtres, horloge
 
 ---
 
@@ -245,9 +248,9 @@ Jarvis2.0/
     ├── automations/         # Scheduled routines
     ├── storage/             # SQLite database helper
     └── web/
-        ├── index.html       # Interface HUD Iron Man (6 onglets)
+        ├── index.html       # Neural command center (orb + fenêtres HUD)
         └── static/
-            ├── styles.css   # Thème Iron Man complet
+            ├── styles.css   # Thème neural command center
             ├── jarvis-fx.js # Orb animé, waveform, glitch, horloge
             └── app.js       # Logique métier et appels API
 ```
