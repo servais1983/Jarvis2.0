@@ -216,29 +216,63 @@ body::after {
 }
 #jarvis-canvas { width:100%; height:100%; }
 
-/* ── Dock inférieur ────────────────────────────────────── */
+/* ── Sous-titres de Jarvis ─────────────────────────────── */
+.jarvis-caption {
+  position:absolute; bottom:118px; left:50%;
+  transform:translateX(-50%);
+  max-width:min(680px,84vw);
+  text-align:center;
+  font-family:var(--font-ui); font-weight:400;
+  font-size:15px; line-height:1.6; letter-spacing:.4px;
+  color:var(--text-bright);
+  text-shadow:0 0 14px rgba(90,169,255,.5), 0 2px 8px rgba(0,0,0,.9);
+  z-index:6; pointer-events:none;
+  transition:opacity .4s;
+}
+.jarvis-caption:empty { opacity:0; }
+
+/* ── Dock inférieur : parler à l'orb ───────────────────── */
 .hud-dock {
   position:absolute; bottom:18px; left:50%;
   transform:translateX(-50%);
   display:flex; flex-direction:column; align-items:center; gap:8px;
   z-index:5;
+  width:min(560px,92vw);
 }
-.dock-pills { display:flex; gap:10px; }
-.dock-pill {
-  background:rgba(3,9,18,0.85);
-  border:1px solid var(--border); border-radius:22px;
-  color:var(--text-bright); cursor:pointer;
-  font-family:var(--font-mono); font-size:11px; letter-spacing:2px;
-  padding:10px 22px; text-transform:uppercase;
-  transition:all .22s;
-  backdrop-filter:blur(6px);
+#orb-form {
+  display:flex; align-items:center; gap:8px;
+  width:100%;
+  background:rgba(1,4,9,0.85);
+  border:1px solid var(--border); border-radius:26px;
+  padding:6px 8px;
+  backdrop-filter:blur(8px);
+  transition:border-color .25s, box-shadow .25s;
 }
-.dock-pill:hover { border-color:var(--cyan); color:var(--cyan); box-shadow:var(--cyan-glow); }
-.dock-pill-voice.active {
-  border-color:var(--gold); color:var(--gold);
-  box-shadow:0 0 14px rgba(240,180,41,0.5);
+#orb-form:focus-within { border-color:var(--cyan); box-shadow:var(--cyan-glow); }
+#orb-input {
+  flex:1; background:transparent; border:none; box-shadow:none;
+  color:var(--text-bright); font-family:var(--font-ui);
+  font-size:14px; letter-spacing:.5px; padding:8px 4px;
 }
+#orb-input:focus { border:none; box-shadow:none; }
+#orb-mic, #orb-send {
+  width:38px; height:38px; border-radius:50%;
+  padding:0; flex-shrink:0;
+  border:1px solid var(--border);
+  background:rgba(90,169,255,0.06);
+  font-size:15px; line-height:1;
+}
+#orb-mic:hover, #orb-send:hover { border-color:var(--cyan); box-shadow:var(--cyan-glow); }
+#orb-mic.active {
+  border-color:var(--green); color:var(--green);
+  background:rgba(52,245,162,0.08);
+  box-shadow:0 0 14px rgba(52,245,162,0.5);
+  animation:mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mic-pulse { 0%,100%{box-shadow:0 0 8px rgba(52,245,162,.4)} 50%{box-shadow:0 0 20px rgba(52,245,162,.8)} }
 #wave-canvas { display:block; }
+
+.console-button { position:absolute; bottom:22px; left:26px; z-index:5; }
 .jarvis-state-label {
   font-size:9px; letter-spacing:6px; color:var(--gold-soft);
   text-transform:uppercase; transition:color .35s;
@@ -469,7 +503,9 @@ button:disabled { opacity:.3; cursor:not-allowed; pointer-events:none; }
   }
 
   .hud-dock { position:fixed; bottom:12px; }
-  .modes-button { position:fixed; bottom:16px; right:14px; }
+  .jarvis-caption { position:fixed; bottom:112px; }
+  .modes-button   { position:fixed; bottom:16px; right:14px; }
+  .console-button { position:fixed; bottom:16px; left:14px; }
 
   .grid-2,.dual-panel-grid,.two-column-form,.auth-grid { grid-template-columns:1fr; }
   .voice-controls { flex-direction:column; align-items:flex-start; }
