@@ -43,6 +43,7 @@ logger = logging.getLogger("jarvis_vocal")
 # ---------------------------------------------------------------------------
 
 WAKE_WORD: str = os.getenv("JARVIS_WAKE_WORD", "jarvis")
+USER_NAME: str = os.getenv("JARVIS_USER_NAME", "Steve")
 OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "deepseek-r1")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
@@ -288,6 +289,7 @@ def ai_assistant(text: str) -> str:
 
     system_prompt = (
         "Tu es Jarvis, l'assistant personnel intelligent d'Iron Man.\n"
+        f"Tu t'adresses à {USER_NAME}, ton utilisateur, par son prénom.\n"
         "Tu réponds toujours en français, de façon concise et directe.\n"
         "Tu es efficace, précis et légèrement formel."
     )
@@ -364,7 +366,9 @@ def main() -> None:
     print(f"\n  Dites '{WAKE_WORD.capitalize()}' pour activer l'assistant.")
     print("  Dites 'arrête' ou 'tais-toi' pour interrompre.\n")
 
-    speak("Jarvis en ligne. Prêt à vous assister.")
+    hour = time.localtime().tm_hour
+    salutation = "Bonjour" if 6 <= hour < 18 else "Bonsoir"
+    speak(f"{salutation} {USER_NAME}. Jarvis en ligne. Prêt à vous assister.")
 
     while True:
         try:

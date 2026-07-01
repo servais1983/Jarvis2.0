@@ -34,18 +34,24 @@ function greetingWord() {
   return 'Bonsoir';
 }
 
+let userName = 'Steve';
+
 async function updateGreeting() {
   const el = document.getElementById('hud-greeting');
-  if (!el) return;
-  let name = '';
   try {
     const res = await fetch('/profile/me');
     if (res.ok) {
       const profile = await res.json();
-      if (profile && profile.display_name) name = profile.display_name;
+      if (profile && profile.display_name) userName = profile.display_name;
     }
-  } catch { /* mode hors-ligne ou auth requise : accueil générique */ }
-  el.textContent = name ? `${greetingWord()}, ${name}.` : `${greetingWord()}.`;
+  } catch { /* mode hors-ligne ou auth requise : prénom par défaut */ }
+  if (el) el.textContent = `${greetingWord()}, ${userName}.`;
+
+  // Personnalise aussi le premier message du chat s'il est encore d'origine
+  const first = document.querySelector('#chat-log .message.assistant p');
+  if (first && first.textContent.startsWith('Je suis en ligne')) {
+    first.textContent = `${greetingWord()}, ${userName}. Je suis en ligne. Dis-moi sur quoi tu veux travailler.`;
+  }
 }
 updateGreeting();
 
@@ -115,7 +121,7 @@ const FACTS = [
         const dx = a.x - b.x, dy = a.y - b.y;
         const d = Math.hypot(dx, dy);
         if (d < LINK_DIST) {
-          ctx.strokeStyle = `rgba(53,224,210,${(1 - d / LINK_DIST) * 0.07})`;
+          ctx.strokeStyle = `rgba(90,169,255,${(1 - d / LINK_DIST) * 0.07})`;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -124,7 +130,7 @@ const FACTS = [
       }
     }
     for (const p of points) {
-      ctx.fillStyle = 'rgba(53,224,210,0.28)';
+      ctx.fillStyle = 'rgba(90,169,255,0.28)';
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();
@@ -225,10 +231,10 @@ const JarvisOrb = (() => {
   }
 
   const STATE_TINTS = {
-    idle:      { r: 64,  g: 220, b: 210 },
+    idle:      { r: 96,  g: 172, b: 255 },
     listening: { r: 62,  g: 245, b: 165 },
     thinking:  { r: 255, g: 190, b: 90  },
-    speaking:  { r: 120, g: 235, b: 255 },
+    speaking:  { r: 165, g: 215, b: 255 },
   };
 
   let rotY = 0, rotX = 0.35;
@@ -256,8 +262,8 @@ const JarvisOrb = (() => {
 
     // Halo de fond
     const halo = ctx.createRadialGradient(CX, CY, sphereR * 0.2, CX, CY, half);
-    halo.addColorStop(0, 'rgba(20,90,110,0.5)');
-    halo.addColorStop(0.55, 'rgba(10,50,70,0.22)');
+    halo.addColorStop(0, 'rgba(15,45,90,0.5)');
+    halo.addColorStop(0.55, 'rgba(8,25,55,0.22)');
     halo.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, SIZE, SIZE);
@@ -306,7 +312,7 @@ const JarvisOrb = (() => {
     ringGrad.addColorStop(1,   'rgba(230,120,30,0.95)');
 
     ctx.save();
-    ctx.shadowColor = 'rgba(255,170,60,0.9)';
+    ctx.shadowColor = 'rgba(240,180,41,0.9)';
     ctx.shadowBlur  = 26 * DPR;
     ctx.strokeStyle = ringGrad;
     ctx.lineWidth   = 4.5 * DPR;
@@ -326,7 +332,7 @@ const JarvisOrb = (() => {
     ctx.save();
     ctx.translate(CX, CY);
     ctx.rotate(t * 0.25);
-    ctx.strokeStyle = 'rgba(255,182,61,0.35)';
+    ctx.strokeStyle = 'rgba(240,180,41,0.35)';
     ctx.lineWidth = 1.4 * DPR;
     ctx.beginPath();
     ctx.arc(0, 0, rr + 9 * DPR, 0.2, 1.2);
@@ -337,7 +343,7 @@ const JarvisOrb = (() => {
     ctx.restore();
 
     // Cercle externe discret
-    ctx.strokeStyle = 'rgba(53,224,210,0.10)';
+    ctx.strokeStyle = 'rgba(90,169,255,0.10)';
     ctx.lineWidth = 1 * DPR;
     ctx.beginPath();
     ctx.arc(CX, CY, half * 0.92, 0, Math.PI * 2);
@@ -401,8 +407,8 @@ window.JarvisOrb = JarvisOrb;
 
     const barW = W / BARS;
     const color = state === 'listening' ? '82,245,165'
-                : state === 'speaking'  ? '120,235,255'
-                : '255,182,61';
+                : state === 'speaking'  ? '150,210,255'
+                : '240,180,41';
     for (let i = 0; i < BARS; i++) {
       const h = Math.max(1, heights[i]);
       const x = i * barW + barW * 0.25;
@@ -437,6 +443,51 @@ const stage    = document.getElementById('command-stage');
 const nodesEl  = document.getElementById('agent-nodes');
 const linksSvg = document.getElementById('agent-links');
 
+/* ── Télémétrie live : compteurs sur les nœuds ──────────── */
+
+function fxAuthHeaders() {
+  const token = sessionStorage.getItem('jarvis_auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function fetchJson(path) {
+  const res = await fetch(path, { headers: fxAuthHeaders() });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+const BADGE_SOURCES = {
+  'win-inbox':        async () => (await fetchJson('/inbox')).length,
+  'win-approbations': async () => (await fetchJson('/approvals?status=pending')).length,
+  'win-dossiers':     async () => (await fetchJson('/investigation-cases')).filter(c => c.status === 'open').length,
+  'win-veille':       async () => (await fetchJson('/watchlists')).length,
+  'win-memoire':      async () => (await fetchJson('/knowledge/documents')).length,
+  'win-methodes':     async () => (await fetchJson('/playbooks')).length,
+  'win-connecteurs':  async () => (await fetchJson('/connectors/status')).filter(c => c.configured).length,
+};
+const badgeCounts = {};
+
+function applyBadges() {
+  document.querySelectorAll('[data-badge-for]').forEach(el => {
+    const count = badgeCounts[el.dataset.badgeFor];
+    if (count > 0) {
+      el.textContent = count > 99 ? '99+' : String(count);
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+}
+
+async function refreshBadges() {
+  await Promise.all(Object.entries(BADGE_SOURCES).map(async ([winId, fn]) => {
+    try { badgeCounts[winId] = await fn(); } catch { /* endpoint indisponible */ }
+  }));
+  applyBadges();
+}
+setInterval(refreshBadges, 60000);
+refreshBadges();
+
 function layoutAgents() {
   if (!stage || !nodesEl || !linksSvg) return;
   const rect = stage.getBoundingClientRect();
@@ -461,7 +512,8 @@ function layoutAgents() {
     node.dataset.tone = tone;
     node.style.left = `${x}px`;
     node.style.top  = `${y}px`;
-    node.innerHTML = `<span class="agent-dot"></span><span class="agent-label">${name}</span>`;
+    node.innerHTML = `<span class="agent-dot"></span><span class="agent-label">${name}</span>`
+      + `<span class="agent-badge hidden" data-badge-for="${winId}"></span>`;
     node.addEventListener('click', () => openWindow(winId));
     nodesEl.appendChild(node);
 
@@ -474,13 +526,14 @@ function layoutAgents() {
     const stop = Math.max(0, dist - orbR * 1.06);
     const ex = elbowX + (dx / dist) * stop;
     const ey = y + (dy / dist) * stop;
-    const tint = tone === 'gold' ? '255,182,61' : '53,224,210';
+    const tint = tone === 'gold' ? '240,180,41' : '90,169,255';
 
     paths += `<path d="M ${x} ${y} L ${elbowX} ${y} L ${ex} ${ey}"
       fill="none" stroke="rgba(${tint},0.28)" stroke-width="1"/>`;
     paths += `<circle cx="${ex}" cy="${ey}" r="1.6" fill="rgba(${tint},0.5)"/>`;
   }
   linksSvg.innerHTML = paths;
+  applyBadges();
 }
 window.addEventListener('resize', layoutAgents);
 layoutAgents();
@@ -492,7 +545,7 @@ layoutAgents();
   for (const [winId, name] of AGENTS) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = name;
+    btn.innerHTML = `${name} <span class="agent-badge hidden" data-badge-for="${winId}"></span>`;
     btn.addEventListener('click', () => openWindow(winId));
     grid.appendChild(btn);
   }
@@ -517,6 +570,7 @@ function closeWindow() {
   if (currentWindow) currentWindow.classList.add('hidden');
   currentWindow = null;
   if (backdrop) backdrop.classList.add('hidden');
+  refreshBadges();          // les actions dans la fenêtre ont pu changer les compteurs
 }
 
 document.querySelectorAll('.hud-window [data-close]').forEach(btn => {
@@ -564,6 +618,10 @@ const newChat   = document.getElementById('new-chat-button');
 
 if (dockChat) dockChat.addEventListener('click', () => openWindow('win-chat'));
 
+// L'orb lui-même ouvre la conversation
+const orbClickable = document.getElementById('jarvis-orb');
+if (orbClickable) orbClickable.addEventListener('click', () => openWindow('win-chat'));
+
 if (dockVoice) {
   dockVoice.addEventListener('click', () => {
     const connect    = document.getElementById('realtime-connect');
@@ -589,11 +647,50 @@ if (newChat) {
     if (session) session.value = `session-${Date.now().toString(36)}`;
     if (log) {
       log.innerHTML = `<div class="message assistant"><span>Jarvis</span>
-        <p>Nouvelle session ouverte. Dis-moi sur quoi tu veux travailler.</p></div>`;
+        <p>Nouvelle session ouverte, ${userName}. Dis-moi sur quoi tu veux travailler.</p></div>`;
     }
     openWindow('win-chat');
   });
 }
+
+/* ── Commandes rapides dans le chat (« ouvre … ») ───────── */
+
+const COMMAND_TARGETS = [
+  [/playbook|m[ée]thode|profil de t[âa]che/, 'win-methodes'],
+  [/dossier|file soc|cas\b/,                 'win-dossiers'],
+  [/inbox|livrable/,                         'win-inbox'],
+  [/m[ée]moire|document|connaissance/,       'win-memoire'],
+  [/triage|analyste/,                        'win-triage'],
+  [/cve|vuln[ée]rabilit/,                    'win-cve'],
+  [/investigation|enqu[êe]te/,               'win-investigation'],
+  [/rapport|incident/,                       'win-rapport'],
+  [/veille|vigie|watchlist|brief/,           'win-veille'],
+  [/routine|automatisation/,                 'win-routines'],
+  [/approbation/,                            'win-approbations'],
+  [/connecteur/,                             'win-connecteurs'],
+  [/profil\b/,                               'win-profil'],
+  [/s[ée]curit[ée]|mfa|session|connexion/,   'win-securite'],
+];
+const OPEN_VERB = /^\s*(ouvre|affiche|montre|lance|va (dans|sur))\s+/i;
+
+document.addEventListener('submit', e => {
+  if (e.target !== document.getElementById('chat-form')) return;
+  const input = document.getElementById('chat-message');
+  if (!input) return;
+  const msg = input.value.trim().toLowerCase();
+  if (!OPEN_VERB.test(msg)) return;
+  const rest = msg.replace(OPEN_VERB, '');
+  for (const [re, winId] of COMMAND_TARGETS) {
+    if (re.test(rest)) {
+      // Commande de navigation : on ouvre le module sans envoyer au LLM
+      e.preventDefault();
+      e.stopPropagation();
+      input.value = '';
+      openWindow(winId);
+      return;
+    }
+  }
+}, true);
 
 /* ── Hooks d'état : chat & voix ─────────────────────────── */
 
