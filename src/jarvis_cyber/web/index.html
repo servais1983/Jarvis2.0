@@ -62,16 +62,21 @@
       </div>
     </div>
 
-    <!-- Dock inférieur : contrôles + waveform -->
+    <!-- Sous-titres : ce que Jarvis dit -->
+    <div class="jarvis-caption" id="jarvis-caption" aria-live="polite"></div>
+
+    <!-- Dock inférieur : on parle directement à l'orb -->
     <div class="hud-dock">
-      <div class="dock-pills">
-        <button id="dock-chat" type="button" class="dock-pill">💬 CHAT</button>
-        <button id="dock-voice" type="button" class="dock-pill dock-pill-voice">🎙 VOIX</button>
-      </div>
+      <form id="orb-form" autocomplete="off">
+        <button id="orb-mic" type="button" title="Parler à Jarvis (reconnaissance vocale)">🎙</button>
+        <input id="orb-input" placeholder="Parle à Jarvis…" aria-label="Parler à Jarvis" />
+        <button id="orb-send" type="submit" title="Envoyer">➤</button>
+      </form>
       <canvas id="wave-canvas" width="260" height="40"></canvas>
       <div class="jarvis-state-label" id="jarvis-state-label">EN VEILLE</div>
     </div>
 
+    <button id="console-button" type="button" class="ghost-pill console-button">⌸ CONSOLE</button>
     <button id="modes-button" type="button" class="ghost-pill modes-button">◈ MODES</button>
 
     <!-- Fallback mobile : accès rapide aux modules -->
@@ -94,10 +99,10 @@
   <div id="overlay-root">
     <div class="overlay-backdrop hidden" id="overlay-backdrop"></div>
 
-    <!-- ── CHAT ─────────────────────────────── -->
-    <section class="hud-window hidden" id="win-chat" data-title="Conversation">
+    <!-- ── CONSOLE (transcription + contrôles avancés) ── -->
+    <section class="hud-window hidden" id="win-chat" data-title="Console">
       <div class="hud-window-head">
-        <div><p class="eyebrow">Conversation</p><h2>Parler à Jarvis</h2></div>
+        <div><p class="eyebrow">Console</p><h2>Transcription &amp; contrôles</h2></div>
         <button type="button" class="win-close" data-close>✕</button>
       </div>
       <div class="hud-window-body">

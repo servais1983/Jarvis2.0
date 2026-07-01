@@ -125,17 +125,20 @@ ollama pull mistral
 
 L'interface web est un centre de commande plein écran, noir profond façon DC Comics — bleu acier et or sur fond gothique :
 
+**On parle directement à l'orb** — pas de chat séparé : un champ « Parle à Jarvis… » et un micro sous la sphère, Jarvis répond à voix haute (synthèse vocale du navigateur) avec sous-titres sous l'orb, et exécute réellement les actions demandées.
+
 | Élément | Description |
 |---|---|
-| **Orb central 3D** | Sphère de ~600 particules bleu acier en rotation, cerclée d'un anneau doré lumineux — cliquer l'orb ouvre la conversation |
-| **Réseau d'agents** | 14 nœuds cliquables (Analyste, Chercheur CVE, Investigateur, Mémoire, Playbooks…) reliés à l'orb par des lignes de circuit |
-| **Compteurs live** | Badges dorés en temps réel sur les nœuds : dossiers ouverts, approbations en attente, inbox, documents, playbooks, watchlists, connecteurs configurés |
-| **Commandes rapides** | Taper « ouvre les dossiers », « affiche l'inbox », « lance une investigation »… dans le chat ouvre directement le module |
+| **Orb conversationnel** | Sphère de ~600 particules bleu acier + anneau doré ; on lui écrit ou on lui parle, il répond en voix + sous-titres |
+| **Reconnaissance vocale** | Micro à gauche du champ : écoute continue fr-FR (Web Speech API), interruption de Jarvis à la voix (« stop », « tais-toi ») |
+| **Intentions comprises** | « ouvre les dossiers », « analyse CVE-2021-44228 », « brief de quart », « brief du jour », « contrôle les SLA », « file de travail », « rapport de situation », « combien de dossiers / playbooks / approbations… », « quelle heure est-il », « présente-toi », « nouvelle session » — le reste part au LLM local |
+| **Actions réelles** | Les intentions déclenchent les vrais workflows (formulaires préremplis + soumis) et Jarvis lit le résultat à voix haute |
+| **Réseau d'agents** | 14 nœuds cliquables reliés à l'orb par des lignes de circuit, avec badges dorés temps réel (dossiers ouverts, approbations, inbox, documents, playbooks, watchlists, connecteurs) |
+| **Console** | Bouton ⌸ CONSOLE : transcription complète de la conversation + contrôles vocaux avancés — les réponses y sont aussi lues par l'orb |
 | **Fond neuronal** | Constellation de particules animées reliées entre elles, plein écran |
-| **Waveform "en écoute"** | Barres audio temps réel (Web Audio API) sous le dock, façon assistant vocal |
+| **Waveform** | Barres audio temps réel (Web Audio API) sous le champ de saisie |
 | **4 états visuels** | Veille (bleu/or) · Écoute (vert) · Traitement (ambre) · Réponse (bleu glacé) |
-| **Cluster de statut** | Horloge, date, accueil personnalisé (« Bonsoir, Steve. »), éphéméride cyber, état système, badges LOCAL/VOIX/SOC |
-| **Fenêtres HUD** | Chaque module s'ouvre en overlay (nœud, dock CHAT/VOIX, ou menu MODES) |
+| **Cluster de statut** | Horloge, date, accueil personnalisé (« Bonsoir, Steve. »), éphéméride cyber, état système |
 | **Mobile** | Orb plein écran + grille de modules avec badges, dock fixé en bas |
 
 Fichiers de l'interface :

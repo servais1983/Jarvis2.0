@@ -52,6 +52,9 @@ async function updateGreeting() {
   if (first && first.textContent.startsWith('Je suis en ligne')) {
     first.textContent = `${greetingWord()}, ${userName}. Je suis en ligne. Dis-moi sur quoi tu veux travailler.`;
   }
+
+  // Accueil affiché sous l'orb (la synthèse vocale attend un geste utilisateur)
+  JarvisVoice.showCaption(`${greetingWord()}, ${userName}. Je suis en ligne — parle-moi ou écris sous l'orb.`);
 }
 updateGreeting();
 
@@ -596,7 +599,7 @@ function closeModesMenu() {
   const grid = document.getElementById('modes-menu-grid');
   if (!btn || !modesMenu || !grid) return;
 
-  const entries = [['win-chat', 'Conversation'], ...AGENTS.map(([id, name]) => [id, name])];
+  const entries = [['win-chat', 'Console'], ...AGENTS.map(([id, name]) => [id, name])];
   for (const [winId, name] of entries) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -610,69 +613,411 @@ function closeModesMenu() {
   });
 })();
 
-/* ── Dock : chat / voix / nouvelle session ──────────────── */
+/* ══════════════════════════════════════════════════════════
+   L'ORB PARLE — voix, oreilles et cerveau de Jarvis
+   ══════════════════════════════════════════════════════════ */
 
-const dockChat  = document.getElementById('dock-chat');
-const dockVoice = document.getElementById('dock-voice');
-const newChat   = document.getElementById('new-chat-button');
+/* ── Voix : synthèse vocale + sous-titres ───────────────── */
 
-if (dockChat) dockChat.addEventListener('click', () => openWindow('win-chat'));
+const JarvisVoice = (() => {
+  const caption = document.getElementById('jarvis-caption');
+  let typeTimer = null;
+  let frVoice = null;
 
-// L'orb lui-même ouvre la conversation
-const orbClickable = document.getElementById('jarvis-orb');
-if (orbClickable) orbClickable.addEventListener('click', () => openWindow('win-chat'));
+  function pickVoice() {
+    const voices = speechSynthesis.getVoices();
+    frVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('fr')) || null;
+  }
+  if (window.speechSynthesis) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
 
-if (dockVoice) {
-  dockVoice.addEventListener('click', () => {
-    const connect    = document.getElementById('realtime-connect');
-    const disconnect = document.getElementById('realtime-disconnect');
-    const active = dockVoice.classList.contains('active');
-    if (active) {
-      if (disconnect) disconnect.click();
-      dockVoice.classList.remove('active');
-    } else {
-      if (connect) connect.click();
-      dockVoice.classList.add('active');
+  function showCaption(text) {
+    if (!caption) return;
+    clearInterval(typeTimer);
+    let i = 0;
+    caption.textContent = '';
+    typeTimer = setInterval(() => {
+      i += 2;
+      caption.textContent = text.slice(0, i);
+      if (i >= text.length) clearInterval(typeTimer);
+    }, 22);
+  }
+
+  function cleanForSpeech(text) {
+    return String(text).replace(/[*_#`>|•]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+  }
+
+  function resumeAfterSpeech() {
+    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() ? 'listening' : 'idle');
+  }
+
+  function speak(text) {
+    const display = String(text).trim();
+    showCaption(display.length > 420 ? display.slice(0, 420) + '…' : display);
+    const spoken = cleanForSpeech(display);
+    if (!window.speechSynthesis || !spoken) {
+      // Pas de synthèse disponible : on anime l'orb le temps de lecture
+      if (JarvisOrb) {
+        JarvisOrb.setState('speaking');
+        setTimeout(resumeAfterSpeech, Math.min(2000 + spoken.length * 40, 9000));
+      }
+      return;
     }
-  });
-  // Resynchronise la pastille si le mode vocal est coupé depuis la fenêtre chat
-  const disconnect = document.getElementById('realtime-disconnect');
-  if (disconnect) disconnect.addEventListener('click', () => dockVoice.classList.remove('active'));
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(spoken);
+    u.lang = 'fr-FR';
+    if (frVoice) u.voice = frVoice;
+    u.rate = 1.04;
+    let started = false;
+    u.onstart = () => { started = true; if (JarvisOrb) JarvisOrb.setState('speaking'); };
+    u.onend = resumeAfterSpeech;
+    u.onerror = resumeAfterSpeech;
+    speechSynthesis.speak(u);
+    // Certains environnements exposent l'API sans voix : ne pas rester bloqué
+    setTimeout(() => { if (!started) resumeAfterSpeech(); }, 3000);
+  }
+
+  function stop() {
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    clearInterval(typeTimer);
+  }
+
+  return { speak, stop, showCaption };
+})();
+
+/* ── Transcription : tout passe aussi dans la console ───── */
+
+function escapeHtmlFx(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
 
-if (newChat) {
-  newChat.addEventListener('click', () => {
-    const log = document.getElementById('chat-log');
-    const session = document.getElementById('chat-session');
-    if (session) session.value = `session-${Date.now().toString(36)}`;
-    if (log) {
-      log.innerHTML = `<div class="message assistant"><span>Jarvis</span>
-        <p>Nouvelle session ouverte, ${userName}. Dis-moi sur quoi tu veux travailler.</p></div>`;
-    }
-    openWindow('win-chat');
-  });
+function logMessage(role, content) {
+  const log = document.getElementById('chat-log');
+  if (!log) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = `message ${role}`;
+  wrapper.dataset.orb = '1';
+  wrapper.innerHTML = `<span>${role === 'assistant' ? 'Jarvis' : 'Toi'}</span><p>${escapeHtmlFx(content)}</p>`;
+  log.appendChild(wrapper);
+  log.scrollTop = log.scrollHeight;
 }
 
-/* ── Commandes rapides dans le chat (« ouvre … ») ───────── */
+/* ── Cerveau : intentions et actions réelles ────────────── */
 
 const COMMAND_TARGETS = [
-  [/playbook|m[ée]thode|profil de t[âa]che/, 'win-methodes'],
-  [/dossier|file soc|cas\b/,                 'win-dossiers'],
-  [/inbox|livrable/,                         'win-inbox'],
-  [/m[ée]moire|document|connaissance/,       'win-memoire'],
-  [/triage|analyste/,                        'win-triage'],
-  [/cve|vuln[ée]rabilit/,                    'win-cve'],
-  [/investigation|enqu[êe]te/,               'win-investigation'],
-  [/rapport|incident/,                       'win-rapport'],
-  [/veille|vigie|watchlist|brief/,           'win-veille'],
-  [/routine|automatisation/,                 'win-routines'],
-  [/approbation/,                            'win-approbations'],
-  [/connecteur/,                             'win-connecteurs'],
-  [/profil\b/,                               'win-profil'],
-  [/s[ée]curit[ée]|mfa|session|connexion/,   'win-securite'],
+  [/playbook|m[ée]thode|profil de t[âa]che/, 'win-methodes',      'Playbooks'],
+  [/dossier|file soc|cas\b/,                 'win-dossiers',      'Dossiers'],
+  [/inbox|livrable/,                         'win-inbox',         'Inbox'],
+  [/m[ée]moire|document|connaissance/,       'win-memoire',       'Mémoire'],
+  [/triage|analyste|alerte/,                 'win-triage',        'Triage'],
+  [/cve|vuln[ée]rabilit/,                    'win-cve',           'Analyse CVE'],
+  [/investigation|enqu[êe]te/,               'win-investigation', 'Investigation'],
+  [/rapport|incident/,                       'win-rapport',       'Rapport'],
+  [/veille|vigie|watchlist/,                 'win-veille',        'Veille CVE'],
+  [/routine|automatisation/,                 'win-routines',      'Routines'],
+  [/approbation/,                            'win-approbations',  'Approbations'],
+  [/connecteur/,                             'win-connecteurs',   'Connecteurs'],
+  [/profil\b/,                               'win-profil',        'Profil'],
+  [/s[ée]curit[ée]|mfa|connexion/,           'win-securite',      'Sécurité'],
+  [/console|transcription|historique/,       'win-chat',          'Console'],
 ];
-const OPEN_VERB = /^\s*(ouvre|affiche|montre|lance|va (dans|sur))\s+/i;
+const OPEN_VERB = /^\s*(ouvre|affiche|montre|va (dans|sur))\s+/i;
 
+function respond(text) {
+  logMessage('assistant', text);
+  JarvisVoice.speak(text);
+}
+
+function summarizeResult(text) {
+  const clean = text
+    .replace(/(\p{L})(\d)/gu, '$1 $2')     // « Actifs27 » → « Actifs 27 »
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean.length > 300 ? clean.slice(0, 300) + '…' : clean;
+}
+
+/* Attend qu'un bloc résultat soit rempli par app.js, puis le lit */
+function watchResult(resultId, timeout = 25000) {
+  return new Promise(resolve => {
+    const el = document.getElementById(resultId);
+    if (!el) return resolve('');
+    const read = () => (el.innerText || el.textContent).trim();   // innerText garde les séparations
+    const initial = read();
+    const started = Date.now();
+    const iv = setInterval(() => {
+      const now = read();
+      const busy = /en cours|génération|chargement/i.test(now);
+      if (now && now !== initial && !busy) { clearInterval(iv); resolve(now); }
+      else if (Date.now() - started > timeout) { clearInterval(iv); resolve(''); }
+    }, 400);
+  });
+}
+
+/* Ouvre un module, préremplit, déclenche l'action app.js et lit le résultat */
+async function runModuleAction(winId, triggerId, resultId, announce, fills = {}) {
+  openWindow(winId);
+  for (const [id, value] of Object.entries(fills)) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+  respond(announce);
+  const trigger = document.getElementById(triggerId);
+  if (trigger) {
+    if (trigger.tagName === 'FORM') trigger.requestSubmit();
+    else trigger.click();
+  }
+  const text = await watchResult(resultId);
+  if (text) respond(summarizeResult(text));
+  else respond("Je n'ai pas obtenu de résultat. Vérifie le module ouvert à l'écran.");
+}
+
+async function speakStatus() {
+  try {
+    const h = await fetchJson('/health');
+    const parts = [`Tous les systèmes sont ${h.status === 'ok' ? 'opérationnels' : 'dégradés'}.`];
+    const cases = badgeCounts['win-dossiers'];
+    const approvals = badgeCounts['win-approbations'];
+    const inbox = badgeCounts['win-inbox'];
+    if (cases) parts.push(`${cases} dossier${cases > 1 ? 's' : ''} d'investigation ouvert${cases > 1 ? 's' : ''}.`);
+    if (approvals) parts.push(`${approvals} approbation${approvals > 1 ? 's' : ''} en attente.`);
+    if (inbox) parts.push(`${inbox} élément${inbox > 1 ? 's' : ''} dans l'inbox.`);
+    if (parts.length === 1) parts.push('Rien ne requiert ton attention immédiate.');
+    respond(parts.join(' '));
+  } catch {
+    respond('Le serveur ne répond pas. Je fonctionne en mode dégradé.');
+  }
+}
+
+function speakCounts(lower) {
+  const asks = [
+    [/dossier|cas\b/,      'win-dossiers',     n => `Il y a ${n} dossier${n > 1 ? 's' : ''} d'investigation ouvert${n > 1 ? 's' : ''}.`],
+    [/approbation/,        'win-approbations', n => `${n} approbation${n > 1 ? 's' : ''} en attente.`],
+    [/inbox|livrable/,     'win-inbox',        n => `${n} élément${n > 1 ? 's' : ''} dans l'inbox.`],
+    [/document|m[ée]moire/,'win-memoire',      n => `${n} document${n > 1 ? 's' : ''} en mémoire.`],
+    [/playbook/,           'win-methodes',     n => `${n} playbook${n > 1 ? 's' : ''} enregistré${n > 1 ? 's' : ''}.`],
+    [/watchlist|veille/,   'win-veille',       n => `${n} watchlist${n > 1 ? 's' : ''} active${n > 1 ? 's' : ''}.`],
+    [/connecteur/,         'win-connecteurs',  n => `${n} connecteur${n > 1 ? 's' : ''} configuré${n > 1 ? 's' : ''}.`],
+  ];
+  for (const [re, winId, phrase] of asks) {
+    if (re.test(lower)) {
+      const n = badgeCounts[winId] ?? 0;
+      return respond(n > 0 ? phrase(n) : 'Aucun pour le moment.');
+    }
+  }
+  respond("Précise ce que tu veux compter : dossiers, approbations, inbox, documents, playbooks, watchlists ou connecteurs.");
+}
+
+function chatSessionId() {
+  const el = document.getElementById('chat-session');
+  return (el && el.value.trim()) || 'perso';
+}
+
+function resetSession() {
+  const log = document.getElementById('chat-log');
+  const session = document.getElementById('chat-session');
+  if (session) session.value = `session-${Date.now().toString(36)}`;
+  if (log) log.innerHTML = '';
+}
+
+/* Routeur principal : chaque phrase adressée à l'orb passe ici */
+async function askJarvis(rawText) {
+  const text = rawText.trim();
+  if (!text) return;
+  const lower = text.toLowerCase();
+
+  // Interruption immédiate
+  if (/^(stop|silence|chut|tais[- ]toi)\.?$/.test(lower)) {
+    JarvisVoice.stop();
+    JarvisVoice.showCaption('');
+    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() ? 'listening' : 'idle');
+    return;
+  }
+
+  logMessage('user', text);
+  if (JarvisOrb) JarvisOrb.setState('thinking');
+  JarvisVoice.showCaption('…');
+
+  // 1. Navigation : « ouvre les dossiers »
+  if (OPEN_VERB.test(lower)) {
+    const rest = lower.replace(OPEN_VERB, '');
+    for (const [re, winId, label] of COMMAND_TARGETS) {
+      if (re.test(rest)) {
+        openWindow(winId);
+        return respond(`J'ouvre le module ${label}.`);
+      }
+    }
+  }
+
+  // 2. Analyse CVE directe : « analyse CVE-2021-44228 »
+  const cve = text.match(/CVE-\d{4}-\d{4,}/i);
+  if (cve) {
+    return runModuleAction('win-cve', 'cve-form', 'cve-result',
+      `J'analyse la ${cve[0].toUpperCase()}.`, { 'cve-id': cve[0].toUpperCase() });
+  }
+
+  // 3. Opérations SOC
+  if (/brief (du jour|quotidien)|r[ée]sum[ée] (du jour|quotidien)/.test(lower)) {
+    return runModuleAction('win-veille', 'daily-brief-form', 'daily-brief-result',
+      'Je génère le brief quotidien.');
+  }
+  if (/brief de (quart|shift)|handover|rel[èe]ve/.test(lower)) {
+    return runModuleAction('win-dossiers', 'refresh-shift-brief', 'shift-brief-result',
+      'Je prépare le brief de quart.');
+  }
+  if (/\bsla\b|vieillissement/.test(lower)) {
+    return runModuleAction('win-dossiers', 'refresh-sla-watch', 'sla-watch-result',
+      'Je contrôle les SLA des dossiers.');
+  }
+  if (/priorit|file (soc|de travail)|par quoi je commence/.test(lower)) {
+    return runModuleAction('win-dossiers', 'refresh-soc-queue', 'soc-queue-list',
+      'Voici la file de travail priorisée.');
+  }
+
+  // 4. Statut & compteurs
+  if (/rapport de situation|statut|status|[ée]tat (du |des |g[ée]n)|es-tu (l[àa]|op[ée]rationnel)|tout va bien|syst[èe]mes?\b/.test(lower)) {
+    return speakStatus();
+  }
+  if (/combien (de|d')/.test(lower)) return speakCounts(lower);
+
+  // 5. Heure, date, identité
+  if (/quelle heure/.test(lower)) {
+    const now = new Date();
+    return respond(`Il est ${now.getHours()} heures ${String(now.getMinutes()).padStart(2, '0')}, ${userName}.`);
+  }
+  if (/quel jour|quelle date/.test(lower)) {
+    return respond(`Nous sommes le ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`);
+  }
+  if (/qui es[- ]tu|pr[ée]sente[- ]toi/.test(lower)) {
+    return respond(`Je suis Jarvis, ton copilote cybersécurité et assistant personnel, ${userName}. Je peux analyser des CVE, trier des alertes, mener des investigations, générer des briefs et piloter tous les modules à l'écran.`);
+  }
+  if (/nouvelle session|r[ée]initialise/.test(lower)) {
+    resetSession();
+    return respond(`Nouvelle session ouverte, ${userName}.`);
+  }
+
+  // 6. Par défaut : le LLM répond (local d'abord, via /chat)
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...fxAuthHeaders() },
+      body: JSON.stringify({ session_id: chatSessionId(), message: text }),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const data = await res.json();
+    respond(data.answer || "Je n'ai pas de réponse à te donner.");
+  } catch {
+    respond("Je n'arrive pas à joindre le moteur de réponse. Vérifie que le serveur Jarvis est en ligne.");
+  }
+}
+
+/* ── Oreilles : reconnaissance vocale continue ──────────── */
+
+const JarvisEars = (() => {
+  const micBtn = document.getElementById('orb-mic');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null;
+  let on = false;
+
+  function start() {
+    if (!SR) {
+      respond('La reconnaissance vocale n’est pas disponible dans ce navigateur. Utilise le champ texte sous l’orb.');
+      return;
+    }
+    if (on) return;
+    on = true;
+    if (micBtn) micBtn.classList.add('active');
+    if (JarvisOrb) JarvisOrb.setState('listening');
+    rec = new SR();
+    rec.lang = 'fr-FR';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = e => {
+      let final = '', interim = '';
+      for (const r of e.results) {
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      if (interim) JarvisVoice.showCaption(interim + ' …');
+      if (final) {
+        JarvisVoice.stop();            // barge-in : on coupe Jarvis s'il parlait
+        askJarvis(final);
+      }
+    };
+    rec.onend = () => { if (on && rec) { try { rec.start(); } catch { /* redémarrage refusé */ } } };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        stop();
+        respond('Je n’ai pas accès au microphone. Autorise-le dans le navigateur.');
+      }
+    };
+    try { rec.start(); } catch { /* déjà démarré */ }
+  }
+
+  function stop() {
+    on = false;
+    if (micBtn) micBtn.classList.remove('active');
+    if (rec) { rec.onend = null; try { rec.stop(); } catch { /* déjà arrêté */ } rec = null; }
+    if (JarvisOrb) JarvisOrb.setState('idle');
+  }
+
+  if (micBtn) micBtn.addEventListener('click', () => (on ? stop() : start()));
+  return { active: () => on, stop };
+})();
+
+/* ── Entrée texte sous l'orb ────────────────────────────── */
+
+const orbForm  = document.getElementById('orb-form');
+const orbInput = document.getElementById('orb-input');
+if (orbForm && orbInput) {
+  orbForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = orbInput.value.trim();
+    if (!text) return;
+    orbInput.value = '';
+    JarvisVoice.stop();
+    askJarvis(text);
+  });
+}
+
+// Cliquer l'orb met le focus sur l'entrée : on lui parle directement
+const orbClickable = document.getElementById('jarvis-orb');
+if (orbClickable && orbInput) orbClickable.addEventListener('click', () => orbInput.focus());
+
+// Bouton console (transcription complète + contrôles avancés)
+const consoleBtn = document.getElementById('console-button');
+if (consoleBtn) consoleBtn.addEventListener('click', () => openWindow('win-chat'));
+
+// Nouvelle session
+const newChat = document.getElementById('new-chat-button');
+if (newChat) {
+  newChat.addEventListener('click', () => {
+    resetSession();
+    respond(`Nouvelle session ouverte, ${userName}. Dis-moi sur quoi tu veux travailler.`);
+  });
+}
+
+/* ── Console : les réponses du formulaire passent aussi par l'orb ── */
+
+const chatLog = document.getElementById('chat-log');
+if (chatLog) {
+  new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1 || node.dataset.orb) continue;   // déjà géré par l'orb
+        if (node.classList.contains('message') && node.classList.contains('assistant')) {
+          const p = node.querySelector('p');
+          if (p) JarvisVoice.speak(p.textContent || '');
+        }
+      }
+    }
+  }).observe(chatLog, { childList: true });
+}
+
+// Navigation rapide depuis le formulaire console (« ouvre … »)
 document.addEventListener('submit', e => {
   if (e.target !== document.getElementById('chat-form')) return;
   const input = document.getElementById('chat-message');
@@ -680,51 +1025,21 @@ document.addEventListener('submit', e => {
   const msg = input.value.trim().toLowerCase();
   if (!OPEN_VERB.test(msg)) return;
   const rest = msg.replace(OPEN_VERB, '');
-  for (const [re, winId] of COMMAND_TARGETS) {
+  for (const [re, winId, label] of COMMAND_TARGETS) {
     if (re.test(rest)) {
-      // Commande de navigation : on ouvre le module sans envoyer au LLM
       e.preventDefault();
       e.stopPropagation();
       input.value = '';
       openWindow(winId);
+      respond(`J'ouvre le module ${label}.`);
       return;
     }
   }
 }, true);
 
-/* ── Hooks d'état : chat & voix ─────────────────────────── */
-
-const chatLog = document.getElementById('chat-log');
-if (chatLog && JarvisOrb) {
-  new MutationObserver(mutations => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (node.classList && node.classList.contains('message') && node.classList.contains('assistant')) {
-          JarvisOrb.setState('speaking');
-          const text = node.textContent || '';
-          const delay = Math.min(3000 + text.length * 30, 12000);
-          setTimeout(() => JarvisOrb.setState('idle'), delay);
-        }
-      }
-    }
-  }).observe(chatLog, { childList: true });
-}
-
-const btnRecord   = document.getElementById('voice-record');
-const btnStop     = document.getElementById('realtime-disconnect');
-const btnRealtime = document.getElementById('realtime-connect');
-
-if (btnRecord && JarvisOrb) {
-  btnRecord.addEventListener('click', () => {
-    JarvisOrb.setState('listening');
-    setTimeout(() => { if (JarvisOrb.getState() === 'listening') JarvisOrb.setState('thinking'); }, 12000);
-  });
-}
-if (btnRealtime && JarvisOrb) btnRealtime.addEventListener('click', () => JarvisOrb.setState('listening'));
-if (btnStop && JarvisOrb)     btnStop.addEventListener('click', () => JarvisOrb.setState('idle'));
-
-const chatForm = document.getElementById('chat-form');
-if (chatForm && JarvisOrb) chatForm.addEventListener('submit', () => JarvisOrb.setState('thinking'));
+// Le formulaire console déclenche l'état « réflexion » de l'orb
+const chatFormEl = document.getElementById('chat-form');
+if (chatFormEl && JarvisOrb) chatFormEl.addEventListener('submit', () => JarvisOrb.setState('thinking'));
 
 /* ── Effet glitch sur la marque ─────────────────────────── */
 
