@@ -1116,3 +1116,37 @@ class IncidentReportResponse(BaseModel):
     result: IncidentReportResult
     model: str
     used_remote_model: bool
+
+
+class MCPServerStatus(BaseModel):
+    name: str
+    command: str
+    connected: bool
+    tools_count: int
+    error: str | None = None
+
+
+class MCPStatusResponse(BaseModel):
+    enabled: bool
+    sdk_available: bool
+    servers: list[MCPServerStatus] = Field(default_factory=list)
+
+
+class MCPToolInfo(BaseModel):
+    server: str
+    name: str
+    description: str
+    input_schema: dict = Field(default_factory=dict)
+
+
+class MCPCallRequest(BaseModel):
+    server: str
+    tool: str
+    arguments: dict = Field(default_factory=dict)
+
+
+class MCPCallResponse(BaseModel):
+    server: str
+    tool: str
+    is_error: bool
+    content: str

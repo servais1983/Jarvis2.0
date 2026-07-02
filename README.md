@@ -148,6 +148,57 @@ Fichiers de l'interface :
 
 ---
 
+## Serveurs MCP — donner de nouveaux outils à Jarvis
+
+Jarvis peut se connecter à des serveurs **MCP (Model Context Protocol)** et utiliser leurs outils depuis l'orb ou la fenêtre « Outils MCP » (nœud doré en bas à droite, avec badge du nombre d'outils).
+
+### Installation
+
+```bash
+pip install -e ".[mcp]"
+cp mcp_servers.json.example mcp_servers.json   # puis adapte-le
+```
+
+### Configuration (`mcp_servers.json`, format compatible Claude Desktop)
+
+```json
+{
+  "mcpServers": {
+    "demo": {
+      "command": "python",
+      "args": ["examples/mcp_demo_server.py"],
+      "enabled": true
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/chemin/vers/dossier"],
+      "enabled": false
+    }
+  }
+}
+```
+
+Un serveur de démonstration est fourni (`examples/mcp_demo_server.py`) avec trois outils : `heure_locale`, `calcul`, `infos_systeme`.
+
+### Utilisation depuis l'orb
+
+| Ce que tu dis / écris | Ce que fait Jarvis |
+|---|---|
+| « quels outils as-tu ? » | Liste les outils MCP disponibles et ouvre la fenêtre |
+| « calcule (12+8)*3 » | Appelle l'outil `calcul` d'un serveur MCP et lit le résultat |
+| « utilise l'outil infos_systeme » | Exécute l'outil nommé (argument texte libre ou JSON) |
+| « ouvre les outils » | Ouvre la fenêtre Outils MCP (serveurs, outils, exécution manuelle) |
+
+### API
+
+- `GET /mcp/status` — état des serveurs configurés (connexion réellement testée)
+- `GET /mcp/tools` — outils exposés par tous les serveurs actifs
+- `POST /mcp/call` — `{"server": "demo", "tool": "calcul", "arguments": {"expression": "7*6"}}`
+
+Chaque appel d'outil est journalisé dans l'audit de sécurité (`mcp.tool_call`). Les serveurs MCP tournent en local sous ton contrôle : n'ajoute que des serveurs de confiance, car leurs outils s'exécutent avec les droits de la machine.
+
+---
+
 ## Key Capabilities
 
 ### AI Cyber Assistant

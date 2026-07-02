@@ -9,3 +9,4 @@ artifacts/
 dist/
 build/
 *.egg-info/
+mcp_servers.json

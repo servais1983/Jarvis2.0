@@ -440,6 +440,7 @@ const AGENTS = [
   ['win-approbations',  'Approbations',  0.575, 0.760, 'gold'],
   ['win-profil',        'Profil',        0.800, 0.690, 'teal'],
   ['win-dossiers',      'Dossiers',      0.115, 0.735, 'teal'],
+  ['win-mcp',           'Outils MCP',    0.880, 0.800, 'gold'],
 ];
 
 const stage    = document.getElementById('command-stage');
@@ -467,6 +468,7 @@ const BADGE_SOURCES = {
   'win-memoire':      async () => (await fetchJson('/knowledge/documents')).length,
   'win-methodes':     async () => (await fetchJson('/playbooks')).length,
   'win-connecteurs':  async () => (await fetchJson('/connectors/status')).filter(c => c.configured).length,
+  'win-mcp':          async () => (await fetchJson('/mcp/tools')).length,
 };
 const badgeCounts = {};
 
@@ -567,6 +569,7 @@ function openWindow(id) {
   win.classList.remove('hidden');
   if (backdrop) backdrop.classList.remove('hidden');
   currentWindow = win;
+  if (id === 'win-mcp') mcpRefresh();
 }
 
 function closeWindow() {
@@ -724,6 +727,7 @@ const COMMAND_TARGETS = [
   [/profil\b/,                               'win-profil',        'Profil'],
   [/s[ée]curit[ée]|mfa|connexion/,           'win-securite',      'Sécurité'],
   [/console|transcription|historique/,       'win-chat',          'Console'],
+  [/outils?( mcp)?|mcp/,                     'win-mcp',           'Outils MCP'],
 ];
 const OPEN_VERB = /^\s*(ouvre|affiche|montre|va (dans|sur))\s+/i;
 
@@ -877,8 +881,57 @@ async function askJarvis(rawText) {
       'Voici la file de travail priorisée.');
   }
 
+  // 3 bis. Outils MCP : calculer ou exécuter un outil par son nom (prioritaire
+  // sur le statut, car les noms d'outils peuvent contenir « système », etc.)
+  const calc = text.match(/^calcule[:\s]+(.+)$/i);
+  if (calc) {
+    const tools = await mcpEnsureTools();
+    const tool = tools.find(t => t.name === 'calcul');
+    if (tool) {
+      try {
+        const data = await mcpCall(tool.server, tool.name, { expression: calc[1].trim() });
+        return respond(data.content);
+      } catch (err) {
+        return respond(`L'outil de calcul a échoué : ${err.message || err}`);
+      }
+    }
+    // pas d'outil de calcul : la question part au LLM ci-dessous
+  }
+  const useTool = text.match(/^(?:utilise|ex[ée]cute) l'outil\s+([\w.-]+)\s*(.*)$/i);
+  if (useTool) {
+    const tools = await mcpEnsureTools();
+    const tool = tools.find(t => t.name.toLowerCase() === useTool[1].toLowerCase());
+    if (!tool) return respond(`Je ne trouve pas d'outil MCP nommé « ${useTool[1]} ».`);
+    let args = {};
+    const rawArgs = useTool[2].trim();
+    if (rawArgs) {
+      try {
+        args = JSON.parse(rawArgs);
+      } catch {
+        // Pas du JSON : si l'outil n'attend qu'un seul champ, on lui passe le texte
+        const props = Object.keys((tool.input_schema || {}).properties || {});
+        if (props.length === 1) args = { [props[0]]: rawArgs };
+      }
+    }
+    try {
+      const data = await mcpCall(tool.server, tool.name, args);
+      return respond(summarizeResult(data.content || "L'outil n'a rien renvoyé."));
+    } catch (err) {
+      return respond(`L'appel de « ${tool.name} » a échoué : ${err.message || err}`);
+    }
+  }
+  if (/quels outils|liste (les |tes )?outils/.test(lower)) {
+    const tools = await mcpEnsureTools();
+    if (!tools.length) {
+      return respond("Aucun outil MCP n'est connecté. Configure mcp_servers.json pour m'en donner.");
+    }
+    openWindow('win-mcp');
+    const names = tools.map(t => t.name).join(', ');
+    return respond(`J'ai ${tools.length} outil${tools.length > 1 ? 's' : ''} MCP à disposition : ${names}.`);
+  }
+
   // 4. Statut & compteurs
-  if (/rapport de situation|statut|status|[ée]tat (du |des |g[ée]n)|es-tu (l[àa]|op[ée]rationnel)|tout va bien|syst[èe]mes?\b/.test(lower)) {
+  if (/rapport de situation|statut|status|[ée]tat (du |des |g[ée]n)|es-tu (l[àa]|op[ée]rationnel)|tout va bien|\bsyst[èe]mes?\b/.test(lower)) {
     return speakStatus();
   }
   if (/combien (de|d')/.test(lower)) return speakCounts(lower);
@@ -913,6 +966,141 @@ async function askJarvis(rawText) {
     respond("Je n'arrive pas à joindre le moteur de réponse. Vérifie que le serveur Jarvis est en ligne.");
   }
 }
+
+/* ── Outils MCP : fenêtre de pilotage + appels ──────────── */
+
+let mcpTools = [];
+let mcpSelectedTool = null;
+
+function mcpArgsSkeleton(schema) {
+  const skeleton = {};
+  const props = (schema && schema.properties) || {};
+  for (const [key, def] of Object.entries(props)) {
+    if (def.type === 'integer' || def.type === 'number') skeleton[key] = 0;
+    else if (def.type === 'boolean') skeleton[key] = false;
+    else if (def.type === 'array') skeleton[key] = [];
+    else if (def.type === 'object') skeleton[key] = {};
+    else skeleton[key] = '';
+  }
+  return skeleton;
+}
+
+function mcpSelectTool(tool) {
+  mcpSelectedTool = tool;
+  const form = document.getElementById('mcp-call-form');
+  const title = document.getElementById('mcp-call-title');
+  const args = document.getElementById('mcp-call-args');
+  if (!form || !title || !args) return;
+  form.classList.remove('hidden');
+  title.textContent = `${tool.server} · ${tool.name}`;
+  args.value = JSON.stringify(mcpArgsSkeleton(tool.input_schema), null, 2);
+}
+
+async function mcpRefresh() {
+  const serverList = document.getElementById('mcp-server-list');
+  const toolList = document.getElementById('mcp-tool-list');
+  if (!serverList || !toolList) return;
+  serverList.textContent = 'Interrogation des serveurs MCP…';
+  serverList.classList.remove('empty');
+  try {
+    const status = await fetchJson('/mcp/status');
+    if (!status.servers.length) {
+      serverList.classList.add('empty');
+      serverList.innerHTML = 'Aucun serveur MCP configuré. Copie <code>mcp_servers.json.example</code> vers <code>mcp_servers.json</code> puis redémarre le serveur.';
+      toolList.classList.add('empty');
+      toolList.textContent = status.sdk_available
+        ? 'Aucun outil disponible.'
+        : "SDK MCP absent : pip install 'jarvis-cyber[mcp]'.";
+      return;
+    }
+    serverList.innerHTML = '';
+    for (const server of status.servers) {
+      const item = document.createElement('div');
+      item.className = 'mcp-item';
+      item.innerHTML = `
+        <span class="mcp-dot ${server.connected ? 'ok' : 'ko'}"></span>
+        <strong>${escapeHtmlFx(server.name)}</strong>
+        <span class="mcp-meta">${server.connected
+          ? `${server.tools_count} outil${server.tools_count > 1 ? 's' : ''}`
+          : escapeHtmlFx(server.error || 'injoignable')}</span>`;
+      serverList.appendChild(item);
+    }
+
+    mcpTools = await fetchJson('/mcp/tools');
+    if (!mcpTools.length) {
+      toolList.classList.add('empty');
+      toolList.textContent = 'Aucun outil exposé par les serveurs connectés.';
+      return;
+    }
+    toolList.classList.remove('empty');
+    toolList.innerHTML = '';
+    for (const tool of mcpTools) {
+      const item = document.createElement('div');
+      item.className = 'mcp-item mcp-tool';
+      item.innerHTML = `
+        <div class="mcp-tool-text">
+          <strong>${escapeHtmlFx(tool.name)}</strong>
+          <span class="mcp-meta">${escapeHtmlFx(tool.server)} — ${escapeHtmlFx(tool.description)}</span>
+        </div>
+        <button type="button" class="secondary-button">UTILISER</button>`;
+      item.querySelector('button').addEventListener('click', () => mcpSelectTool(tool));
+      toolList.appendChild(item);
+    }
+  } catch (err) {
+    serverList.classList.add('empty');
+    serverList.textContent = `Statut MCP indisponible : ${err.message || err}`;
+  }
+}
+
+async function mcpCall(server, tool, args) {
+  const res = await fetch('/mcp/call', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...fxAuthHeaders() },
+    body: JSON.stringify({ server, tool, arguments: args || {} }),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try { detail = (await res.json()).detail || detail; } catch { /* corps non JSON */ }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+async function mcpEnsureTools() {
+  if (!mcpTools.length) {
+    try { mcpTools = await fetchJson('/mcp/tools'); } catch { /* MCP indisponible */ }
+  }
+  return mcpTools;
+}
+
+const mcpForm = document.getElementById('mcp-call-form');
+if (mcpForm) {
+  mcpForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!mcpSelectedTool) return;
+    const resultEl = document.getElementById('mcp-result');
+    const argsEl = document.getElementById('mcp-call-args');
+    let args = {};
+    try {
+      args = JSON.parse(argsEl.value || '{}');
+    } catch {
+      resultEl.className = 'result';
+      resultEl.textContent = 'Arguments invalides : le JSON ne se lit pas.';
+      return;
+    }
+    resultEl.className = 'result';
+    resultEl.textContent = 'Exécution en cours…';
+    try {
+      const data = await mcpCall(mcpSelectedTool.server, mcpSelectedTool.name, args);
+      resultEl.textContent = data.content || '(réponse vide)';
+      respond(summarizeResult(data.content || "L'outil n'a rien renvoyé."));
+    } catch (err) {
+      resultEl.textContent = `Échec : ${err.message || err}`;
+    }
+  });
+}
+const mcpRefreshBtn = document.getElementById('mcp-refresh');
+if (mcpRefreshBtn) mcpRefreshBtn.addEventListener('click', mcpRefresh);
 
 /* ── Oreilles : reconnaissance vocale continue ──────────── */
 

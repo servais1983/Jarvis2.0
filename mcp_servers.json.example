@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "demo": {
+      "command": "python",
+      "args": ["examples/mcp_demo_server.py"],
+      "env": {},
+      "enabled": true
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/chemin/vers/dossier"],
+      "enabled": false
+    }
+  }
+}

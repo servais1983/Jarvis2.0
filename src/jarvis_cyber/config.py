@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     sentinel_workspace_id: str | None = None
     sentinel_access_token: SecretStr | None = None
     http_timeout_seconds: float = 20.0
+    mcp_servers_file: str = "./mcp_servers.json"
+    mcp_call_timeout_seconds: int = 30
     host: str = "127.0.0.1"
     port: int = 8000
     openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")

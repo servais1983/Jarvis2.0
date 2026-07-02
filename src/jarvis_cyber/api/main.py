@@ -121,12 +121,18 @@ from jarvis_cyber.core.schemas import (
     Watchlist,
     WatchlistCreateRequest,
     ConnectorStatus,
+    MCPCallRequest,
+    MCPCallResponse,
+    MCPServerStatus,
+    MCPStatusResponse,
+    MCPToolInfo,
     ConnectorSecretStatus,
     ConnectorSecretWriteRequest,
 )
 from jarvis_cyber.services.assistant import assistant_service
 from jarvis_cyber.services.automations import automation_service
 from jarvis_cyber.services.briefings import briefing_service
+from jarvis_cyber.services.mcp_client import MCPError, mcp_service
 from jarvis_cyber.services.scheduler import automation_scheduler
 from jarvis_cyber.services.realtime import (
     RealtimeServiceUnavailableError,
@@ -1284,6 +1290,46 @@ def connector_status(
             credential_source=connector_secret_service.source("microsoft_sentinel"),
         ),
     ]
+
+
+@app.get("/mcp/status", response_model=MCPStatusResponse)
+async def mcp_status(
+    _user: UserResponse = Depends(require_permissions("connectors.read")),
+) -> MCPStatusResponse:
+    servers = await mcp_service.status()
+    return MCPStatusResponse(
+        enabled=bool(servers),
+        sdk_available=mcp_service.available,
+        servers=[MCPServerStatus(**server) for server in servers],
+    )
+
+
+@app.get("/mcp/tools", response_model=list[MCPToolInfo])
+async def mcp_tools(
+    _user: UserResponse = Depends(require_permissions("connectors.read")),
+) -> list[MCPToolInfo]:
+    return [MCPToolInfo(**tool) for tool in await mcp_service.list_all_tools()]
+
+
+@app.post("/mcp/call", response_model=MCPCallResponse)
+async def mcp_call(
+    payload: MCPCallRequest,
+    user: UserResponse = Depends(require_permissions("connectors.read")),
+) -> MCPCallResponse:
+    try:
+        result = await mcp_service.call_tool(payload.server, payload.tool, payload.arguments)
+    except MCPError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    auth_service.record_audit_event(
+        event_type="mcp.tool_call",
+        actor_user_id=user.user_id,
+        metadata={
+            "server": payload.server,
+            "tool": payload.tool,
+            "is_error": result["is_error"],
+        },
+    )
+    return MCPCallResponse(**result)
 
 
 @app.get("/admin/connector-secrets", response_model=list[ConnectorSecretStatus])

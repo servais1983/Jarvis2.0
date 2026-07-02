@@ -458,6 +458,24 @@ button:disabled { opacity:.3; cursor:not-allowed; pointer-events:none; }
 .method-list.empty,.session-list.empty,.admin-user-list.empty,.document-list.empty,.audit-event-list.empty { color:var(--text-dim); font-size:11px; letter-spacing:1px; font-style:italic; padding:12px; text-align:center; }
 .session-list,.admin-user-list,.document-list,.audit-event-list { display:flex; flex-direction:column; gap:5px; max-height:220px; overflow-y:auto; }
 
+/* ── Outils MCP ────────────────────────────────────────── */
+.mcp-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px;
+  background:rgba(1,5,11,.6);
+  border:1px solid var(--border); border-radius:3px;
+  font-size:12px;
+}
+.mcp-item strong { color:var(--text-bright); font-weight:600; font-family:var(--font-ui); }
+.mcp-meta { color:var(--text-dim); font-size:11px; }
+.mcp-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.mcp-dot.ok { background:var(--green); box-shadow:0 0 8px var(--green); }
+.mcp-dot.ko { background:var(--red);   box-shadow:0 0 8px var(--red); }
+.mcp-tool { justify-content:space-between; }
+.mcp-tool-text { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.mcp-tool-text .mcp-meta { overflow:hidden; text-overflow:ellipsis; }
+code { color:var(--gold); background:rgba(240,180,41,.08); padding:1px 5px; border-radius:3px; font-size:11px; }
+
 /* ── Auth ──────────────────────────────────────────────── */
 .auth-chip { font-size:9px; letter-spacing:2px; padding:4px 10px; border:1px solid var(--border); border-radius:2px; color:var(--text-dim); text-transform:uppercase; flex-shrink:0; }
 .auth-chip.connected { border-color:rgba(52,245,162,.45); color:var(--green); }

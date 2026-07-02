@@ -506,6 +506,39 @@
       </div>
     </section>
 
+    <!-- ── OUTILS MCP ───────────────────────── -->
+    <section class="hud-window hidden" id="win-mcp" data-title="Outils MCP">
+      <div class="hud-window-head">
+        <div><p class="eyebrow">Model Context Protocol</p><h2>Outils externes</h2></div>
+        <div class="win-head-right">
+          <button id="mcp-refresh" type="button" class="secondary-button">ACTUALISER</button>
+          <button type="button" class="win-close" data-close>✕</button>
+        </div>
+      </div>
+      <div class="hud-window-body">
+        <div class="panel-heading compact-heading">
+          <div><p class="eyebrow">Serveurs</p><h2>Serveurs connectés</h2></div>
+        </div>
+        <div id="mcp-server-list" class="method-list empty">Aucun serveur MCP configuré. Copie <code>mcp_servers.json.example</code> vers <code>mcp_servers.json</code> puis redémarre.</div>
+
+        <div class="panel-heading compact-heading heading-spaced">
+          <div><p class="eyebrow">Outils</p><h2>Outils disponibles</h2></div>
+        </div>
+        <div id="mcp-tool-list" class="method-list empty">Aucun outil chargé.</div>
+
+        <form id="mcp-call-form" class="stack heading-spaced hidden">
+          <div class="panel-heading compact-heading">
+            <div><p class="eyebrow">Exécution</p><h2 id="mcp-call-title">Outil</h2></div>
+          </div>
+          <label>Arguments (JSON)
+            <textarea id="mcp-call-args" rows="4" spellcheck="false">{}</textarea>
+          </label>
+          <button type="submit">► EXÉCUTER L'OUTIL</button>
+        </form>
+        <div id="mcp-result" class="result empty">Aucun outil exécuté.</div>
+      </div>
+    </section>
+
     <!-- ── PROFIL ───────────────────────────── -->
     <section class="hud-window hidden" id="win-profil" data-title="Profil">
       <div class="hud-window-head">
