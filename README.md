@@ -123,6 +123,17 @@ ollama pull mistral
 
 ## Interface — Neural Command Center (Dark Knight edition)
 
+### Démarrage en une commande
+
+```bat
+start.bat        &:: Windows
+```
+```bash
+./start.sh       # Linux / macOS
+```
+
+Le script fait tout : environnement virtuel, dépendances (serveur + MCP), création de `.env` et `mcp_servers.json` s'ils manquent, démarrage d'Ollama en arrière-plan s'il est installé, lancement du serveur et ouverture du navigateur sur l'interface. Il ne reste qu'à **cliquer sur l'orb et parler**.
+
 L'interface web est un centre de commande plein écran, noir profond façon DC Comics — bleu acier et or sur fond gothique :
 
 **On parle directement à l'orb** — pas de chat séparé : un champ « Parle à Jarvis… » et un micro sous la sphère, Jarvis répond à voix haute (synthèse vocale du navigateur) avec sous-titres sous l'orb, et exécute réellement les actions demandées.

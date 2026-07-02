@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -99,6 +100,24 @@ def test_mcp_end_to_end_with_demo_server(monkeypatch, tmp_path) -> None:
     assert call.status_code == 200
     assert call.json()["is_error"] is False
     assert "60" in call.json()["content"]
+
+
+@pytest.mark.skipif(not MCP_AVAILABLE, reason="SDK MCP non installé")
+def test_generic_python_command_resolves_to_current_interpreter(tmp_path) -> None:
+    # mcp_servers.json.example utilise "command": "python" : il doit être
+    # résolu vers l'interpréteur du venv (où le SDK mcp est installé).
+    config = tmp_path / "mcp_servers.json"
+    config.write_text(
+        json.dumps(
+            {"mcpServers": {"demo": {"command": "python", "args": [str(DEMO_SERVER)]}}}
+        ),
+        encoding="utf-8",
+    )
+    service = MCPService(config_path=str(config))
+    assert service._resolve_command("python") == sys.executable
+    assert service._resolve_command("npx") == "npx"
+    tools = asyncio.run(service.list_tools("demo"))
+    assert {tool["name"] for tool in tools} == {"heure_locale", "calcul", "infos_systeme"}
 
 
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="SDK MCP non installé")

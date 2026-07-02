@@ -1,18 +1,19 @@
 @echo off
 setlocal EnableExtensions
-title Jarvis Cyber
+title J.A.R.V.I.S.
 cd /d "%~dp0"
 
 echo ============================================
-echo   Jarvis Cyber - Demarrage
+echo   J.A.R.V.I.S. - Demarrage complet
 echo ============================================
 echo.
 
 set "VENV_DIR=%CD%\.venv"
 set "PYTHON=%VENV_DIR%\Scripts\python.exe"
 
+REM ── 1. Environnement virtuel ────────────────────────────────
 if not exist "%PYTHON%" (
-    echo Creation de l'environnement virtuel .venv...
+    echo [1/5] Creation de l'environnement virtuel .venv...
     py -3 -m venv "%VENV_DIR%"
     if errorlevel 1 (
         echo.
@@ -21,70 +22,82 @@ if not exist "%PYTHON%" (
         pause
         exit /b 1
     )
-    echo Environnement virtuel cree.
 ) else (
-    echo Environnement virtuel detecte.
+    echo [1/5] Environnement virtuel detecte.
 )
 
-echo.
-echo Installation / verification des dependances...
-"%PYTHON%" -m pip install --disable-pip-version-check -e ".[dev]"
+REM ── 2. Dependances (serveur + outils MCP) ───────────────────
+echo [2/5] Installation / verification des dependances...
+"%PYTHON%" -m pip install --disable-pip-version-check -q -e ".[dev,mcp]"
 if errorlevel 1 (
     echo.
     echo ERREUR: l'installation des dependances a echoue.
-    echo Le message complet est affiche ci-dessus.
     pause
     exit /b 1
 )
-
-echo.
-echo Verification des modules principaux...
-"%PYTHON%" -c "import fastapi, openai, uvicorn, jarvis_cyber; print('Dependances OK.')"
+"%PYTHON%" -c "import fastapi, uvicorn, jarvis_cyber; print('      Dependances OK.')"
 if errorlevel 1 (
-    echo.
     echo ERREUR: certains modules Python ne peuvent pas etre importes.
     pause
     exit /b 1
 )
 
+REM ── 3. Fichiers de configuration ────────────────────────────
+echo [3/5] Configuration...
 if not exist ".env" (
-    echo.
-    echo Creation de .env depuis .env.example...
-    copy /Y ".env.example" ".env" >nul
+    if exist ".env.example" (
+        copy /Y ".env.example" ".env" >nul
+        echo       .env cree depuis .env.example
+    )
+)
+if not exist "mcp_servers.json" (
+    if exist "mcp_servers.json.example" (
+        copy /Y "mcp_servers.json.example" "mcp_servers.json" >nul
+        echo       mcp_servers.json cree : serveur MCP de demonstration actif.
+        echo       Ajoutez-y vos propres serveurs MCP.
+    )
 )
 
-set "OPENAI_READY="
-if defined OPENAI_API_KEY set "OPENAI_READY=1"
-if not defined OPENAI_READY (
-    findstr /R /C:"^OPENAI_API_KEY=..*" ".env" >nul
-    if not errorlevel 1 set "OPENAI_READY=1"
+REM ── 4. Ollama (cerveau local) ───────────────────────────────
+echo [4/5] Verification d'Ollama...
+curl -s --max-time 2 http://localhost:11434/api/version >nul 2>&1
+if not errorlevel 1 (
+    echo       Ollama est deja en ligne : agent local actif.
+    goto ollama_done
 )
-
-if not defined OPENAI_READY (
-    echo.
-    echo ATTENTION: OPENAI_API_KEY est vide dans .env.
-    echo Le chat OpenAI, la transcription, la synthese vocale et Realtime
-    echo resteront indisponibles tant que cette cle ne sera pas configuree.
-    echo.
-    echo Editez ce fichier:
-    echo   %CD%\.env
-    echo.
+where ollama >nul 2>&1
+if errorlevel 1 (
+    echo       Ollama n'est pas installe : https://ollama.com
+    echo       Jarvis fonctionnera avec OpenAI si configure, sinon en mode local.
+    goto ollama_done
+)
+echo       Demarrage d'Ollama en arriere-plan...
+start "Ollama" /MIN cmd /c "ollama serve"
+timeout /t 3 /nobreak >nul
+curl -s --max-time 2 http://localhost:11434/api/version >nul 2>&1
+if not errorlevel 1 (
+    echo       Ollama demarre : agent local actif.
 ) else (
-    echo Configuration OpenAI detectee: fonctions IA et voix activees.
+    echo       Ollama n'a pas repondu a temps : il finira de demarrer seul.
 )
+:ollama_done
 
+REM ── 5. Lancement ────────────────────────────────────────────
+echo [5/5] Demarrage de J.A.R.V.I.S. ...
 echo.
-echo Demarrage de Jarvis Cyber...
-echo Interface: http://127.0.0.1:8000
-echo Arret: Ctrl+C
+echo    Interface : http://127.0.0.1:8000
+echo    Cliquez sur l'orb et parlez. Arret : Ctrl+C
 echo.
+
+REM Ouvre le navigateur une fois le serveur pret
+start "" /B cmd /c "timeout /t 3 /nobreak >nul & start "" http://127.0.0.1:8000"
 
 "%PYTHON%" -m uvicorn jarvis_cyber.api.main:app --host 127.0.0.1 --port 8000
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if not "%EXIT_CODE%"=="0" (
     echo.
-    echo ERREUR: Jarvis Cyber s'est arrete avec le code %EXIT_CODE%.
+    echo ERREUR: Jarvis s'est arrete avec le code %EXIT_CODE%.
     pause
 )
 

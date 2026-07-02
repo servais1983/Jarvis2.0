@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -105,9 +106,21 @@ class MCPService:
 
     # ── Opérations ───────────────────────────────────────────────
 
+    @staticmethod
+    def _resolve_command(command: str) -> str:
+        """« python » dans la config = l'interpréteur qui exécute Jarvis.
+
+        Permet à mcp_servers.json.example de fonctionner tel quel : le serveur
+        MCP est lancé avec le Python du venv (où le SDK mcp est installé),
+        sur toutes les plateformes.
+        """
+        if command in ("python", "python3"):
+            return sys.executable
+        return command
+
     async def _with_session(self, config: MCPServerConfig, operation):
         params = StdioServerParameters(
-            command=config.command,
+            command=self._resolve_command(config.command),
             args=config.args,
             env=config.env or None,
         )
