@@ -829,8 +829,12 @@ function resetSession() {
 
 /* Routeur principal : chaque phrase adressée à l'orb passe ici */
 async function askJarvis(rawText) {
-  const text = rawText.trim();
-  if (!text) return;
+  // Mot d'éveil : « Jarvis, … » accepté à la voix comme à l'écrit
+  const text = rawText.trim().replace(/^\s*(ok |hey |hé |dis )?jarvis[\s,!:.]+/i, '').trim();
+  if (!text) {
+    if (/jarvis/i.test(rawText)) respond(`Oui, ${userName} ?`);
+    return;
+  }
   const lower = text.toLowerCase();
 
   // Interruption immédiate
@@ -1146,6 +1150,8 @@ const JarvisEars = (() => {
       }
     };
     try { rec.start(); } catch { /* déjà démarré */ }
+    // Le geste d'activation débloque la synthèse : Jarvis répond de vive voix
+    JarvisVoice.speak(`Je t'écoute, ${userName}.`);
   }
 
   function stop() {
@@ -1156,7 +1162,7 @@ const JarvisEars = (() => {
   }
 
   if (micBtn) micBtn.addEventListener('click', () => (on ? stop() : start()));
-  return { active: () => on, stop };
+  return { active: () => on, start, stop };
 })();
 
 /* ── Entrée texte sous l'orb ────────────────────────────── */
@@ -1174,9 +1180,17 @@ if (orbForm && orbInput) {
   });
 }
 
-// Cliquer l'orb met le focus sur l'entrée : on lui parle directement
+// Cliquer l'orb = parler : bascule l'écoute vocale continue
 const orbClickable = document.getElementById('jarvis-orb');
-if (orbClickable && orbInput) orbClickable.addEventListener('click', () => orbInput.focus());
+if (orbClickable) {
+  orbClickable.addEventListener('click', () => {
+    if (JarvisEars.active()) JarvisEars.stop();
+    else JarvisEars.start();
+  });
+}
+
+// API scriptable : permet de piloter Jarvis depuis l'extérieur (intégrations)
+window.JarvisAsk = askJarvis;
 
 // Bouton console (transcription complète + contrôles avancés)
 const consoleBtn = document.getElementById('console-button');
