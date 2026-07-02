@@ -17,6 +17,7 @@ class ChatResponse(BaseModel):
     used_remote_model: bool
     knowledge_hits: list["KnowledgeSearchResult"] = Field(default_factory=list)
     citations: list["KnowledgeCitation"] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

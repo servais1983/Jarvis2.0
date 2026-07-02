@@ -508,11 +508,13 @@ def export_audit_events(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest, user: UserResponse = Depends(require_permissions("chat.use"))) -> ChatResponse:
-    answer, model, used_remote_model, knowledge_hits, citations = assistant_service.respond(
-        user_id=user.user_id,
-        session_id=payload.session_id,
-        message=payload.message,
-        role=user.role,
+    answer, model, used_remote_model, knowledge_hits, citations, tools_used = (
+        assistant_service.respond(
+            user_id=user.user_id,
+            session_id=payload.session_id,
+            message=payload.message,
+            role=user.role,
+        )
     )
     return ChatResponse(
         session_id=payload.session_id,
@@ -521,6 +523,7 @@ def chat(payload: ChatRequest, user: UserResponse = Depends(require_permissions(
         used_remote_model=used_remote_model,
         knowledge_hits=knowledge_hits,
         citations=citations,
+        tools_used=tools_used,
     )
 
 
@@ -1569,7 +1572,7 @@ async def voice_chat(
     except VoiceServiceUnavailableError as error:
         raise HTTPException(status_code=503, detail="Voice service unavailable.") from error
 
-    answer, model, used_remote_model, _, citations = assistant_service.respond(
+    answer, model, used_remote_model, _, citations, _ = assistant_service.respond(
         user_id=user.user_id,
         session_id=session_id,
         message=transcript,

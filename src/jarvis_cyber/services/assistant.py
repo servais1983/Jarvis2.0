@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Callable, TypeVar
@@ -14,6 +15,10 @@ from jarvis_cyber.memory.store import memory_store
 from jarvis_cyber.playbooks.store import playbook_store
 from jarvis_cyber.profile.store import profile_store
 from jarvis_cyber.services.connector_context import connector_context_service
+from jarvis_cyber.services.local_agent import (
+    LocalAgentUnavailableError,
+    local_agent_service,
+)
 from jarvis_cyber.services.tool_catalog import tool_catalog_service
 
 logger = logging.getLogger(__name__)
@@ -41,7 +46,7 @@ class AssistantService:
         message: str,
         *,
         role: str = "admin",
-    ) -> tuple[str, str, bool, list[KnowledgeSearchResult], list[KnowledgeCitation]]:
+    ) -> tuple[str, str, bool, list[KnowledgeSearchResult], list[KnowledgeCitation], list[str]]:
         memory_store.append(user_id=user_id, session_id=session_id, role="user", content=message)
         history = memory_store.recent(
             user_id=user_id,
@@ -59,16 +64,6 @@ class AssistantService:
         playbook_context = playbook_store.prompt_context(user_id, message)
         inbox_context = inbox_store.summary_context(user_id)
         connector_context = connector_context_service.prompt_context()
-
-        if self._client is None:
-            answer = self._local_chat_fallback(message, len(knowledge_hits))
-            memory_store.append(
-                user_id=user_id,
-                session_id=session_id,
-                role="assistant",
-                content=answer,
-            )
-            return answer, settings.main_model, False, knowledge_hits, citations
 
         context_block = self._format_knowledge_context(knowledge_chunks)
         instructions = (
@@ -90,13 +85,43 @@ class AssistantService:
             "Quand tu t'appuies sur le contexte documentaire, cite les sources internes "
             "avec le format [S1], [S2], etc."
         )
+        history_payload = [{"role": turn.role, "content": turn.content} for turn in history]
+
+        # 1) Moteur local d'abord : Ollama, avec les outils MCP à sa disposition
+        local_result = self._try_local_agent(message, history_payload, instructions)
+        if local_result is not None:
+            memory_store.append(
+                user_id=user_id,
+                session_id=session_id,
+                role="assistant",
+                content=local_result.answer,
+            )
+            return (
+                local_result.answer,
+                local_result.model,
+                False,
+                knowledge_hits,
+                citations,
+                local_result.tools_used,
+            )
+
+        # 2) Modèle distant OpenAI si configuré
+        if self._client is None:
+            answer = self._local_chat_fallback(message, len(knowledge_hits))
+            memory_store.append(
+                user_id=user_id,
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+            )
+            return answer, settings.main_model, False, knowledge_hits, citations, []
 
         try:
             response = self._respond_with_tools(
                 user_id=user_id,
                 role=role,
                 instructions=instructions,
-                history=[{"role": turn.role, "content": turn.content} for turn in history],
+                history=history_payload,
             )
         except OpenAIError:
             answer = self._local_chat_fallback(message, len(knowledge_hits))
@@ -106,7 +131,7 @@ class AssistantService:
                 role="assistant",
                 content=answer,
             )
-            return answer, settings.main_model, False, knowledge_hits, citations
+            return answer, settings.main_model, False, knowledge_hits, citations, []
         answer = response.output_text
         memory_store.append(
             user_id=user_id,
@@ -114,7 +139,29 @@ class AssistantService:
             role="assistant",
             content=answer,
         )
-        return answer, settings.main_model, True, knowledge_hits, citations
+        return answer, settings.main_model, True, knowledge_hits, citations, []
+
+    @staticmethod
+    def _try_local_agent(message: str, history: list[dict], system_prompt: str):
+        """Tente une réponse via Ollama + outils MCP ; None si indisponible."""
+
+        async def run():
+            if not await local_agent_service.available():
+                return None
+            return await local_agent_service.chat(
+                message=message,
+                history=history,
+                system_prompt=system_prompt,
+            )
+
+        try:
+            return asyncio.run(run())
+        except LocalAgentUnavailableError as exc:
+            logger.info("Agent local indisponible : %s", exc)
+            return None
+        except Exception as exc:  # le chat ne doit jamais casser pour un souci local
+            logger.warning("Agent local en erreur : %s", exc, exc_info=True)
+            return None
 
     def _respond_with_tools(
         self,

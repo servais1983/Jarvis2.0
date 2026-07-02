@@ -197,6 +197,20 @@ Un serveur de démonstration est fourni (`examples/mcp_demo_server.py`) avec tro
 
 Chaque appel d'outil est journalisé dans l'audit de sécurité (`mcp.tool_call`). Les serveurs MCP tournent en local sous ton contrôle : n'ajoute que des serveurs de confiance, car leurs outils s'exécutent avec les droits de la machine.
 
+### Le LLM local décide seul d'utiliser les outils (agent Ollama)
+
+Si **Ollama** tourne (`http://localhost:11434`), le `/chat` de Jarvis devient un **agent** : le modèle local reçoit les outils MCP en tool-calling et choisit lui-même quand les appeler. Pose une question libre à l'orb — « Combien font 21*2 ? » — et Jarvis appelle l'outil `calcul`, récupère le résultat, puis formule la réponse à voix haute. Les outils utilisés sont indiqués dans la console (`tools_used` dans la réponse API).
+
+Ordre des moteurs du chat : **Ollama local → OpenAI (si configuré) → fallback local**.
+
+```env
+# .env — optionnel, valeurs par défaut :
+JARVIS_OLLAMA_BASE_URL=http://localhost:11434
+JARVIS_OLLAMA_MODEL=llama3.1        # ou OLLAMA_MODEL — choisis un modèle qui supporte les tools
+```
+
+> Le tool-calling nécessite un modèle Ollama compatible (llama3.1+, qwen2.5, mistral-nemo…). Sans outils MCP configurés, l'agent Ollama répond simplement en conversation.
+
 ---
 
 ## Key Capabilities

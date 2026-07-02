@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = 20.0
     mcp_servers_file: str = "./mcp_servers.json"
     mcp_call_timeout_seconds: int = 30
+    ollama_base_url: str = Field(default="http://localhost:11434", validation_alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="llama3.1", validation_alias="OLLAMA_MODEL")
+    ollama_timeout_seconds: float = 120.0
     host: str = "127.0.0.1"
     port: int = 8000
     openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")

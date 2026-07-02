@@ -962,6 +962,9 @@ async function askJarvis(rawText) {
     if (!res.ok) throw new Error(String(res.status));
     const data = await res.json();
     respond(data.answer || "Je n'ai pas de réponse à te donner.");
+    if (data.tools_used && data.tools_used.length) {
+      logMessage('assistant', `Outils MCP utilisés : ${data.tools_used.join(', ')}`);
+    }
   } catch {
     respond("Je n'arrive pas à joindre le moteur de réponse. Vérifie que le serveur Jarvis est en ligne.");
   }

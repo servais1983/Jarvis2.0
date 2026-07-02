@@ -200,7 +200,7 @@ def test_assistant_falls_back_locally_when_openai_is_unavailable(monkeypatch) ->
         lambda **kwargs: (_ for _ in ()).throw(OpenAIError("quota unavailable")),
     )
 
-    answer, _, used_remote_model, _, _ = service.respond(
+    answer, _, used_remote_model, _, _, _ = service.respond(
         "analyst-1",
         "voice",
         "Teste le mode vocal",
