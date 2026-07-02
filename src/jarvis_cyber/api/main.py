@@ -370,7 +370,11 @@ def disable_mfa_factor(
 
 @app.get("/profile/me", response_model=UserProfileResponse)
 def get_profile(user: UserResponse = Depends(current_user)) -> UserProfileResponse:
-    return profile_store.get(user.user_id)
+    profile = profile_store.get(user.user_id)
+    if not profile.display_name:
+        # Prénom par défaut (JARVIS_USER_NAME) tant que le profil n'est pas renseigné
+        profile = profile.model_copy(update={"display_name": settings.user_name})
+    return profile
 
 
 @app.put("/profile/me", response_model=UserProfileResponse)

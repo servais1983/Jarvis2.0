@@ -138,7 +138,7 @@ L'interface web est un centre de commande plein écran, noir profond façon DC C
 | **Fond neuronal** | Constellation de particules animées reliées entre elles, plein écran |
 | **Waveform** | Barres audio temps réel (Web Audio API) sous le champ de saisie |
 | **4 états visuels** | Veille (bleu/or) · Écoute (vert) · Traitement (ambre) · Réponse (bleu glacé) |
-| **Cluster de statut** | Horloge, date, accueil personnalisé (« Bonsoir, Steve. »), éphéméride cyber, état système |
+| **Cluster de statut** | Horloge, date, accueil personnalisé — « Bonsoir, Steve. » (prénom via `JARVIS_USER_NAME`, remplacé par le nom du profil s'il est renseigné), éphéméride cyber, état système |
 | **Mobile** | Orb plein écran + grille de modules avec badges, dock fixé en bas |
 
 Fichiers de l'interface :

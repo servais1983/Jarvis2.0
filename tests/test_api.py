@@ -182,7 +182,7 @@ def test_profile_round_trip() -> None:
     update_response = client.put(
         "/profile/me",
         json={
-            "display_name": "Stephane",
+            "display_name": "Steve",
             "job_title": "Analyste SOC",
             "organization": "Blue Team",
             "environment_summary": "Microsoft 365 et Sentinel.",
@@ -197,7 +197,7 @@ def test_profile_round_trip() -> None:
     assert initial_response.status_code == 200
     assert initial_response.json()["user_id"] == "local-dev"
     assert update_response.status_code == 200
-    assert update_response.json()["display_name"] == "Stephane"
+    assert update_response.json()["display_name"] == "Steve"
     assert update_response.json()["response_style"] == "concise"
     assert update_response.json()["approval_preference"] == "always_ask"
 

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     )
 
     env: str = "development"
+    user_name: str = "Steve"
     main_model: str = "gpt-4o"
     fast_model: str = "gpt-4o-mini"
     realtime_model: str = "gpt-4o-realtime-preview"

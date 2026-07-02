@@ -11,7 +11,7 @@ def test_profile_prompt_context_includes_working_context(monkeypatch, tmp_path) 
     store.update(
         "analyst-1",
         UserProfileUpdateRequest(
-            display_name="Stephane",
+            display_name="Steve",
             job_title="Analyste SOC",
             organization="Blue Team",
             environment_summary="Microsoft 365, Sentinel, Defender.",
