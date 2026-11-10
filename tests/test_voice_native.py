@@ -239,3 +239,50 @@ def test_recited_prompt_and_subtitle_ghosts_are_discarded() -> None:
     assert not is_ghost("Jarvis", prompt)                       # le mot d'éveil seul reste valable
     assert not is_ghost("Jarvis, ouvre Safari", prompt)
     assert not is_ghost("ouvre Spotify et Chrome", prompt)
+
+
+# ── Interruption à la voix pendant que Jarvis parle ──────────────
+
+
+def _engine_while_speaking(spoken: str) -> tuple[NativeVoiceEngine, FakeSpeaker, queue.Queue]:
+    speaker = FakeSpeaker()
+    engine = NativeVoiceEngine(ScriptedTranscriber([]), speaker, lambda: None)
+    engine._spoken_text = spoken
+    return engine, speaker, engine.subscribe()
+
+
+def _drain(subscriber: queue.Queue) -> list[dict]:
+    events = []
+    while not subscriber.empty():
+        events.append(subscriber.get())
+    return [e for e in events if e["type"] != "state"]
+
+
+def test_jarvis_does_not_interrupt_himself_on_his_own_echo() -> None:
+    spoken = "Je suis Jarvis, ton copilote cybersécurité et assistant personnel, Steve."
+    engine, speaker, subscriber = _engine_while_speaking(spoken)
+    engine._handle("je suis Jarvis ton copilote cyber sécurité", during_speech=True)
+    engine._handle("et assistant personnel Steve", during_speech=True)
+    assert _drain(subscriber) == []
+    assert speaker.stopped == 0
+
+
+def test_talk_nearby_without_wake_word_does_not_interrupt() -> None:
+    engine, speaker, subscriber = _engine_while_speaking("Tous les systèmes sont opérationnels.")
+    engine._engaged_until = float("inf")          # même en conversation ouverte
+    engine._handle("tu as vu le match hier soir", during_speech=True)
+    assert _drain(subscriber) == []
+    assert speaker.stopped == 0
+
+
+def test_wake_word_interrupts_speech() -> None:
+    engine, speaker, subscriber = _engine_while_speaking("Tous les systèmes sont opérationnels.")
+    engine._handle("Jarvis, stop", during_speech=True)
+    assert _drain(subscriber) == [{"type": "stop"}]
+    assert speaker.stopped == 1
+
+    engine, speaker, subscriber = _engine_while_speaking("Voici la file de travail priorisée.")
+    speaker.speaking = True
+    engine._handle("Jarvis, ouvre plutôt Safari", during_speech=True)
+    assert _drain(subscriber) == [{"type": "command", "text": "ouvre plutôt Safari"}]
+    assert speaker.stopped == 1

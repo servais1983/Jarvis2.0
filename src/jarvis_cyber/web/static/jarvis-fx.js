@@ -491,11 +491,27 @@ function applyBadges() {
   });
 }
 
+// Ce que Jarvis annonce de lui-même quand le compteur augmente
+const ANNOUNCEMENTS = {
+  'win-approbations': n => `${userName}, ${n > 1 ? `${n} approbations attendent` : 'une approbation attend'} ta décision.`,
+  'win-inbox':        n => `${userName}, ${n > 1 ? `${n} nouveaux éléments sont arrivés` : 'un nouvel élément est arrivé'} dans ton inbox.`,
+};
+let badgesLoadedOnce = false;
+
 async function refreshBadges() {
+  const before = { ...badgeCounts };
   await Promise.all(Object.entries(BADGE_SOURCES).map(async ([winId, fn]) => {
     try { badgeCounts[winId] = await fn(); } catch { /* endpoint indisponible */ }
   }));
   applyBadges();
+  if (badgesLoadedOnce) {
+    for (const [winId, phrase] of Object.entries(ANNOUNCEMENTS)) {
+      const gained = (badgeCounts[winId] || 0) - (before[winId] || 0);
+      const quiet = JarvisOrb && ['idle', 'listening'].includes(JarvisOrb.getState());
+      if (gained > 0 && quiet && !NativeLink.busy) { respond(phrase(gained)); break; }
+    }
+  }
+  badgesLoadedOnce = true;
 }
 setInterval(refreshBadges, 60000);
 refreshBadges();

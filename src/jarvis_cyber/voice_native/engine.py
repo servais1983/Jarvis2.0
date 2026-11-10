@@ -2,15 +2,16 @@
 
 Le moteur n'interprète pas les commandes : il les publie (événement
 `command`) et l'interface les route, exactement comme une phrase tapée.
-Fonctionnement en alternat : pendant que Jarvis parle, le micro est ignoré
-(sinon il s'entendrait lui-même), sauf si l'interruption vocale est activée
-— à réserver à un usage au casque.
+Pendant que Jarvis parle, il reste interruptible à la voix : seule une phrase
+contenant le mot d'éveil est prise en compte, et tout ce qui ressemble à sa
+propre réponse captée par le micro (écho des haut-parleurs) est écarté.
 """
 
 from __future__ import annotations
 
 import logging
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -22,6 +23,10 @@ from jarvis_cyber.voice_native.wake import extract_command
 logger = logging.getLogger(__name__)
 
 _STOP_WORDS = {"stop", "silence", "chut", "tais-toi", "tais toi", "arrête", "arrete", "ça suffit"}
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-zà-ÿ0-9]+", text.lower())
 
 
 class AudioSource(Protocol):
@@ -42,7 +47,7 @@ class NativeVoiceEngine:
         source_factory: Callable[[], AudioSource],
         wake_word: str = "jarvis",
         followup_seconds: float = 8.0,
-        barge_in: bool = False,
+        barge_in: bool = True,
     ) -> None:
         self._transcriber = transcriber
         self._speaker = speaker
@@ -56,6 +61,7 @@ class NativeVoiceEngine:
         self._source: AudioSource | None = None
         self._engaged_until = 0.0
         self._last_level_at = 0.0
+        self._spoken_text = ""
         self.state = "stopped"
         self.last_error: str | None = None
         self.last_heard: str | None = None
@@ -119,6 +125,7 @@ class NativeVoiceEngine:
     # ── Parole ───────────────────────────────────────────────────
 
     def speak(self, text: str) -> None:
+        self._spoken_text = text
         self._set_state("speaking")
 
         def done() -> None:
@@ -132,6 +139,15 @@ class NativeVoiceEngine:
     def silence(self) -> None:
         self._speaker.stop()
 
+    def _is_echo(self, text: str) -> bool:
+        """Vrai si la phrase entendue est surtout faite des mots que Jarvis est en train de dire."""
+        heard = _words(text)
+        if not heard:
+            return True
+        spoken = set(_words(self._spoken_text))
+        overlap = sum(1 for word in heard if word in spoken) / len(heard)
+        return overlap >= 0.6
+
     # ── Boucle d'écoute ──────────────────────────────────────────
 
     def _run(self) -> None:
@@ -143,16 +159,18 @@ class NativeVoiceEngine:
             self._set_state("listening")
             self._emit({"type": "ready"})
             for frame in self._source.frames():
-                if self._speaker.speaking and not self._barge_in:
+                speaking = self._speaker.speaking
+                if speaking and not self._barge_in:
                     segmenter.reset()
                     continue
                 utterance = segmenter.feed(frame)
                 self._publish_level(segmenter)
                 if utterance is None:
                     continue
-                self._set_state("thinking")
+                if not speaking:
+                    self._set_state("thinking")
                 text = self._transcriber.transcribe(utterance)
-                self._handle(text)
+                self._handle(text, during_speech=speaking)
                 if self.state == "thinking":
                     self._set_state("listening")
         except Exception as exc:  # micro absent, permission refusée, modèle introuvable…
@@ -173,12 +191,14 @@ class NativeVoiceEngine:
             self._set_state("hearing" if segmenter.in_speech else "listening")
         self._emit({"type": "level", "level": round(min(1.0, segmenter.level * 12), 3)})
 
-    def _handle(self, text: str) -> None:
+    def _handle(self, text: str, during_speech: bool = False) -> None:
         text = (text or "").strip()
         if not text:
             return
-        self.last_heard = text
         result = extract_command(text, self._wake_word)
+        if during_speech and (not result.heard or self._is_echo(text)):
+            return  # sa propre voix, ou une conversation qui ne lui est pas adressée
+        self.last_heard = text
         engaged = time.monotonic() < self._engaged_until
         if not (result.heard or engaged):
             self._emit({"type": "heard", "text": text, "addressed": False})

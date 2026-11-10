@@ -50,6 +50,7 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 |---|---|
 | **Mot d'éveil** | « Jarvis, quelle heure est-il ? » — variantes phonétiques acceptées, les phrases sans « Jarvis » sont ignorées |
 | **Conversation suivie** | Après une réponse, 8 secondes pendant lesquelles on peut enchaîner sans redire « Jarvis » |
+| **Initiative** | Jarvis annonce de lui-même une nouvelle approbation en attente ou un nouvel élément dans l'inbox |
 | **Transcription** | faster-whisper, sur le Mac, sans envoi d'audio sur Internet |
 | **Voix** | `say` avec la meilleure voix française installée (Réglages → Accessibilité → Contenu énoncé pour en ajouter de meilleures) |
 | **Contrôle du Mac** | Ouvrir/fermer une application, ouvrir un site, recherche web ou YouTube, volume, musique, état de la machine, notification |
@@ -58,7 +59,7 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 
 ### Limites connues
 
-- Pendant que Jarvis parle, le micro est ignoré pour qu'il ne s'entende pas lui-même : on l'interrompt avec la touche Échap. `JARVIS_VOICE_BARGE_IN=true` autorise l'interruption à la voix, à réserver à un usage au casque.
+- On interrompt Jarvis avec la touche Échap, ou à la voix en disant « Jarvis, stop » ou « Jarvis, … » suivi d'une autre demande. Ce qu'il capte de sa propre voix est écarté. Sur haut-parleurs, l'interruption vocale peut ne pas être comprise quand les deux voix se superposent ; au casque elle est fiable. `JARVIS_VOICE_BARGE_IN=false` la désactive.
 - Les questions libres demandent Ollama (`brew install ollama`) et un modèle qui gère les outils (`llama3.1` par défaut, ~5 Go). Sans lui, seules les commandes directes répondent, et Jarvis le dit.
 - L'application n'est ni signée ni notariée par Apple : cela demande un compte développeur Apple.
 
@@ -68,6 +69,7 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 JARVIS_USER_NAME=Steve
 JARVIS_WAKE_WORD=jarvis
 JARVIS_STT_MODEL=small            # base (plus rapide) · small · medium (plus précis)
+JARVIS_STT_PROMPT=                # vocabulaire à reconnaître, ex. « Jarvis. Figma, Xcode, Notion. »
 JARVIS_NATIVE_TTS_VOICE=          # vide = meilleure voix française trouvée
 JARVIS_NATIVE_TTS_RATE=185
 JARVIS_VOICE_FOLLOWUP_SECONDS=8

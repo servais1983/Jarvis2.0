@@ -208,3 +208,21 @@ def test_assistant_falls_back_locally_when_openai_is_unavailable(monkeypatch) ->
 
     assert used_remote_model is False
     assert "mode local" in answer.lower()
+
+
+def test_instructions_ask_for_answers_that_can_be_spoken(monkeypatch) -> None:
+    from jarvis_cyber.services import assistant as assistant_module
+
+    captured = {}
+
+    def capture_prompt(message, history, system_prompt):
+        captured["prompt"] = system_prompt
+        return None  # moteur local indisponible : la suite du repli ne nous intéresse pas ici
+
+    monkeypatch.setattr(
+        assistant_module.AssistantService, "_try_local_agent", staticmethod(capture_prompt)
+    )
+    assistant_module.AssistantService().respond("voix-user", "voix", "Bonjour")
+    assert "lue à voix haute" in captured["prompt"]
+    assert "sans markdown" in captured["prompt"]
+    assert "Steve" in captured["prompt"]

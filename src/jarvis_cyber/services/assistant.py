@@ -83,7 +83,8 @@ class AssistantService:
             "ne peux pas déduire du contexte seul. Pour toute action qui modifie l'état, prépare "
             "la demande mais laisse les garde-fous exiger l'approbation humaine avant exécution.\n\n"
             "Quand tu t'appuies sur le contexte documentaire, cite les sources internes "
-            "avec le format [S1], [S2], etc."
+            "avec le format [S1], [S2], etc.\n\n"
+            f"{self._spoken_style(user_id)}"
         )
         history_payload = [{"role": turn.role, "content": turn.content} for turn in history]
 
@@ -140,6 +141,18 @@ class AssistantService:
             content=answer,
         )
         return answer, settings.main_model, True, knowledge_hits, citations, []
+
+    @staticmethod
+    def _spoken_style(user_id: str) -> str:
+        """Consignes de forme : la réponse est dite à voix haute par l'orb."""
+        name = profile_store.get(user_id).display_name or settings.user_name
+        return (
+            "Ta réponse est lue à voix haute par une synthèse vocale. Réponds en français, "
+            "en phrases courtes et naturelles, sans liste à puces, sans markdown, sans "
+            "symboles ni tableaux, et en trois phrases au plus sauf si on te demande le "
+            f"détail. Tu t'adresses à {name} par son prénom. Quand un outil te donne un "
+            "résultat, dis-le simplement sans décrire l'outil."
+        )
 
     @staticmethod
     def _try_local_agent(message: str, history: list[dict], system_prompt: str):

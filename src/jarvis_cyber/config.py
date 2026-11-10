@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     native_tts_voice: str = ""
     native_tts_rate: int = 185
     voice_followup_seconds: float = 8.0
-    voice_barge_in: bool = False
+    voice_barge_in: bool = True
     mic_device: str | None = None
     host: str = "127.0.0.1"
     port: int = 8000
