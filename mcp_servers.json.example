@@ -1,10 +1,14 @@
 {
   "mcpServers": {
+    "systeme": {
+      "command": "python",
+      "args": ["-m", "jarvis_cyber.mcp_builtin.system_server"],
+      "enabled": true
+    },
     "demo": {
       "command": "python",
       "args": ["examples/mcp_demo_server.py"],
-      "env": {},
-      "enabled": true
+      "enabled": false
     },
     "filesystem": {
       "command": "npx",

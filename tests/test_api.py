@@ -50,7 +50,7 @@ def test_chat() -> None:
     assert body["model"]
     assert body["session_id"] == "test"
     assert body["used_remote_model"] is False
-    assert "Jarvis Cyber est prêt en mode local" in body["answer"]
+    assert "mode local, sans moteur de langage" in body["answer"]
     assert body["citations"] == []
 
 

@@ -133,6 +133,9 @@ from jarvis_cyber.services.assistant import assistant_service
 from jarvis_cyber.services.automations import automation_service
 from jarvis_cyber.services.briefings import briefing_service
 from jarvis_cyber.services.mcp_client import MCPError, mcp_service
+from jarvis_cyber.services.native_voice import get_native_voice, native_voice_available
+from jarvis_cyber.api.native_voice import router as native_voice_router
+from jarvis_cyber.api.native_voice import system_router
 from jarvis_cyber.services.scheduler import automation_scheduler
 from jarvis_cyber.services.realtime import (
     RealtimeServiceUnavailableError,
@@ -185,9 +188,13 @@ from jarvis_cyber.sentinel_queries.templates import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await automation_scheduler.start()
+    if settings.native_voice_enabled and native_voice_available():
+        get_native_voice().start()
     try:
         yield
     finally:
+        if settings.native_voice_enabled:
+            get_native_voice().stop()
         await automation_scheduler.stop()
 
 
@@ -201,6 +208,8 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+app.include_router(native_voice_router)
+app.include_router(system_router)
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
 

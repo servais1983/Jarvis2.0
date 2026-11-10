@@ -259,11 +259,15 @@ class AssistantService:
 
     @staticmethod
     def _local_chat_fallback(message: str, knowledge_hit_count: int) -> str:
+        found = (
+            f" J'ai trouvé {knowledge_hit_count} extrait(s) dans ta base documentaire."
+            if knowledge_hit_count
+            else ""
+        )
         return (
-            "Jarvis Cyber est prêt en mode local. "
-            f"Demande reçue : « {message} ». "
-            f"{knowledge_hit_count} extrait(s) documentaire(s) pertinent(s) trouvé(s). "
-            "Le service IA distant est indisponible ou sans quota."
+            "Je fonctionne en mode local, sans moteur de langage : je ne peux pas répondre "
+            "à cette question libre. Lance Ollama pour me donner un cerveau ; mes commandes "
+            f"directes restent disponibles.{found}"
         )
 
     @staticmethod
