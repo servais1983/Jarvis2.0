@@ -116,6 +116,8 @@ jobs:
           echo; pkill -f "Jarvis.app/Contents/MacOS/Jarvis" || true
           tail -30 gui.log || true
           ls -la jarvis-window.png
+          python -m pip install -q --disable-pip-version-check pillow
+          python scripts/check_window_capture.py jarvis-window.png
 
       - uses: actions/upload-artifact@v4
         if: always()
