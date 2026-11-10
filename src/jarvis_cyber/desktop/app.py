@@ -232,7 +232,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         handlers=[
             logging.FileHandler(base / "logs" / "jarvis.log", encoding="utf-8"),
-            logging.StreamHandler(),
+            # Une app lancée depuis le Finder peut ne pas avoir de sortie d'erreur
+            *([logging.StreamHandler()] if sys.stderr is not None else []),
         ],
     )
     logger = logging.getLogger("jarvis.desktop")

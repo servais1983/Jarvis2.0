@@ -37,7 +37,7 @@ if ! curl -s http://localhost:11434 >/dev/null 2>&1; then
     echo ""
     echo "ATTENTION: Ollama n'est pas lancé."
     echo "Téléchargez Ollama sur https://ollama.com"
-    echo "Puis lancez : ollama pull deepseek-r1"
+    echo "Puis lancez : ollama pull llama3.1"
     echo ""
     echo "Jarvis démarrera quand même (fallback OpenAI si configuré)."
     echo ""

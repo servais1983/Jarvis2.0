@@ -37,7 +37,7 @@ if errorlevel 1 (
     echo.
     echo ATTENTION: Ollama ne semble pas etre lance.
     echo Telechargez Ollama sur https://ollama.com
-    echo Puis lancez : ollama pull deepseek-r1
+    echo Puis lancez : ollama pull llama3.1
     echo.
     echo Jarvis essaiera quand meme de demarrer.
     echo Il utilisera OpenAI comme fallback si OPENAI_API_KEY est defini.
