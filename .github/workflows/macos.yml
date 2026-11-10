@@ -100,7 +100,7 @@ jobs:
           APP=dist/Jarvis.app/Contents/MacOS/Jarvis
           "$APP" --smoke-test --require-voice --data-dir "$RUNNER_TEMP/jarvis-data"
           "$APP" --transcribe "$PWD/heure.wav" --data-dir "$RUNNER_TEMP/jarvis-data"
-          du -sh dist/Jarvis.app dist/*.zip
+          du -sh dist/Jarvis.app dist/*.zip dist/*.dmg
 
       - name: Fenêtre réelle de l'application (capture d'écran)
         continue-on-error: true
@@ -128,6 +128,21 @@ jobs:
       - name: Journal Ollama
         if: always()
         run: tail -40 ollama.log || true
+
+      - name: L'installeur contient bien l'application
+        run: |
+          hdiutil attach dist/Jarvis-macOS-arm64.dmg -mountpoint "$RUNNER_TEMP/dmg" -nobrowse -quiet
+          ls -la "$RUNNER_TEMP/dmg"
+          test -x "$RUNNER_TEMP/dmg/Jarvis.app/Contents/MacOS/Jarvis"
+          test -L "$RUNNER_TEMP/dmg/Applications"
+          hdiutil detach "$RUNNER_TEMP/dmg" -quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-macOS-arm64-installeur
+          path: dist/Jarvis-macOS-*.dmg
+          if-no-files-found: error
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:

@@ -38,7 +38,8 @@ Sur Mac, Jarvis tourne comme une application : une fenêtre, un micro toujours �
 
 ### Lancer
 
-- **Application construite** : téléchargez `Jarvis-macOS-arm64.zip` depuis l'onglet *Actions* du dépôt (dernier run réussi du workflow macOS, section *Artifacts*), dézippez, puis au premier lancement faites clic droit → *Ouvrir* (l'app n'est pas signée par Apple).
+- **Installeur** : dans l'onglet *Actions* du dépôt, ouvrez le dernier run réussi du workflow macOS et téléchargez `Jarvis-macOS-arm64-installeur` (section *Artifacts*). Dézippez, ouvrez le `.dmg`, glissez Jarvis dans *Applications*. Mac Apple Silicon (M1 et suivants), macOS 12 ou plus.
+- **Premier lancement** : l'app n'est pas signée par Apple, macOS la bloque donc une fois. Soit *Réglages Système → Confidentialité et sécurité → Ouvrir quand même* après une première tentative, soit dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Jarvis.app`.
 - **Depuis les sources** : double-cliquez `start_mac.command` (crée le venv, installe, lance).
 - **Construire soi-même** : `bash packaging/macos/build.sh` → `dist/Jarvis.app`.
 

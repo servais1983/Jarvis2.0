@@ -10,5 +10,14 @@ rm -rf build dist
 
 ARCH="$(uname -m)"
 ditto -c -k --sequesterRsrc --keepParent dist/Jarvis.app "dist/Jarvis-macOS-${ARCH}.zip"
+
+# Image disque d'installation : on glisse Jarvis dans Applications
+STAGE="$(mktemp -d)"
+cp -R dist/Jarvis.app "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "Jarvis" -srcfolder "$STAGE" -ov -format UDZO "dist/Jarvis-macOS-${ARCH}.dmg" > /dev/null
+rm -rf "$STAGE"
+
 echo "Application : dist/Jarvis.app"
 echo "Archive     : dist/Jarvis-macOS-${ARCH}.zip"
+echo "Installeur  : dist/Jarvis-macOS-${ARCH}.dmg"
