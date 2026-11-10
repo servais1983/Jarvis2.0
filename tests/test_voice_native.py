@@ -20,7 +20,7 @@ client = TestClient(app)
 
 @pytest.mark.parametrize(
     "heard",
-    ["Jarvis", "jarvis,", "Jarvi", "Jervis", "Javis", "Djarvis", "Charvis", "Jarvisse", "JARVIS!"],
+    ["Jarvis", "jarvis,", "Jarvi", "Jarvie,", "Jervis", "Javis", "Djarvis", "Charvis", "Jarvisse", "JARVIS!"],
 )
 def test_wake_word_variants_are_recognised(heard: str) -> None:
     result = extract_command(f"{heard} ouvre Safari")

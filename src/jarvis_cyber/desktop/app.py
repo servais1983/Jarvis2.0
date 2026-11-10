@@ -171,6 +171,12 @@ def smoke_test(port: int, require_voice: bool = False) -> int:
         voice = client.get("/voice/native/status").json()
         report["voix"] = {k: voice[k] for k in ("available", "missing", "tts_available", "tts_voice")}
         report["cerveau"] = client.get("/system/brain").json()
+    try:
+        import webview  # noqa: F401  (la fenêtre native doit être embarquée)
+
+        report["fenetre"] = True
+    except Exception as exc:
+        report["fenetre"] = f"indisponible : {exc}"
     print(json.dumps(report, ensure_ascii=False, indent=2))
     ok = (
         report["health"] == "ok"
@@ -180,6 +186,7 @@ def smoke_test(port: int, require_voice: bool = False) -> int:
         and report["mcp"][0][1] is True
         and report["outil_calcul"] == "(21*2)+8 = 50"
         and (report["voix"]["available"] or not require_voice)
+        and (report["fenetre"] is True or not require_voice)
     )
     print("SMOKE TEST:", "OK" if ok else "ÉCHEC")
     return 0 if ok else 1

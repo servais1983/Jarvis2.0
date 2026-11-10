@@ -11,7 +11,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-_JARVIS = re.compile(r"^(?:d?j|g|ch)[ae]r?v[iy](?:s{1,2}e?|ce|x|z)?$")
+_JARVIS = re.compile(r"^(?:d?j|g|ch)[ae]r?v[iy](?:s{1,2}e?|ce|x|z|e)?$")
 _LEADING = {"ok", "okay", "hey", "he", "eh", "dis", "dit", "bonjour", "salut", "merci", "et"}
 _PUNCT = re.compile(r"^[\s,.;:!?…\-–—'\"«»]+|[\s,.;:!?…\-–—'\"«»]+$")
 

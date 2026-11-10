@@ -102,6 +102,29 @@ jobs:
           "$APP" --transcribe "$PWD/heure.wav" --data-dir "$RUNNER_TEMP/jarvis-data"
           du -sh dist/Jarvis.app dist/*.zip
 
+      - name: Fenêtre réelle de l'application (capture d'écran)
+        continue-on-error: true
+        run: |
+          APP=dist/Jarvis.app/Contents/MacOS/Jarvis
+          "$APP" --data-dir "$RUNNER_TEMP/jarvis-gui" > gui.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8765/health > /dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:8765/health
+          sleep 20
+          screencapture -x jarvis-window.png
+          curl -s http://127.0.0.1:8765/voice/native/status
+          echo; curl -s http://127.0.0.1:8765/system/brain
+          echo; pkill -f "Jarvis.app/Contents/MacOS/Jarvis" || true
+          tail -30 gui.log || true
+          ls -la jarvis-window.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-fenetre
+          path: jarvis-window.png
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Journal Ollama
         if: always()
         run: tail -40 ollama.log || true
