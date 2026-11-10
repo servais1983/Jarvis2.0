@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     wake_word: str = "jarvis"
     stt_model: str = "small"
     stt_language: str = "fr"
+    stt_prompt: str = ""
     native_tts_voice: str = ""
     native_tts_rate: int = 185
     voice_followup_seconds: float = 8.0

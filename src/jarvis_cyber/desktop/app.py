@@ -218,7 +218,9 @@ def main(argv: list[str] | None = None) -> int:
         from jarvis_cyber.voice_native.stt import WhisperTranscriber
         from jarvis_cyber.voice_native.vad import UtteranceSegmenter
 
-        transcriber = WhisperTranscriber(settings.stt_model, settings.stt_language, settings.wake_word)
+        transcriber = WhisperTranscriber(
+            settings.stt_model, settings.stt_language, settings.wake_word, settings.stt_prompt
+        )
         segmenter = UtteranceSegmenter()
         heard = []
         for frame in WavFileSource(args.transcribe).frames():

@@ -216,3 +216,26 @@ def test_status_endpoint_reports_missing_components() -> None:
     assert body["wake_word"] == "jarvis"
     assert isinstance(body["missing"], list)
     assert body["available"] is (body["missing"] == [])
+
+
+# ── Garde-fous de transcription ──────────────────────────────────
+
+
+def test_transcriber_prompt_is_closed_and_customisable() -> None:
+    from jarvis_cyber.voice_native.stt import WhisperTranscriber
+
+    default = WhisperTranscriber(wake_word="jarvis")
+    assert default.prompt.startswith("Jarvis. ") and default.prompt.endswith(".")
+    assert WhisperTranscriber(prompt="Jarvis. Figma, Xcode.").prompt == "Jarvis. Figma, Xcode."
+
+
+def test_recited_prompt_and_subtitle_ghosts_are_discarded() -> None:
+    from jarvis_cyber.voice_native.stt import WhisperTranscriber
+
+    prompt = WhisperTranscriber().prompt
+    is_ghost = WhisperTranscriber.is_hallucination
+    assert is_ghost("Safari, Spotify, Chrome", prompt)
+    assert is_ghost("Sous-titres réalisés par la communauté d'Amara.org", prompt)
+    assert not is_ghost("Jarvis", prompt)                       # le mot d'éveil seul reste valable
+    assert not is_ghost("Jarvis, ouvre Safari", prompt)
+    assert not is_ghost("ouvre Spotify et Chrome", prompt)

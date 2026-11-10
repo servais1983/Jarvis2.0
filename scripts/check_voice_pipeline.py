@@ -33,7 +33,9 @@ class SilentSpeaker:
 
 def main() -> int:
     path, expected = sys.argv[1], sys.argv[2]
-    transcriber = WhisperTranscriber(settings.stt_model, settings.stt_language, settings.wake_word)
+    transcriber = WhisperTranscriber(
+            settings.stt_model, settings.stt_language, settings.wake_word, settings.stt_prompt
+        )
     engine = NativeVoiceEngine(
         transcriber, SilentSpeaker(), lambda: WavFileSource(path), wake_word=settings.wake_word
     )

@@ -33,7 +33,7 @@ def get_native_voice() -> NativeVoiceEngine:
             device = int(device)
         _engine = NativeVoiceEngine(
             transcriber=WhisperTranscriber(
-                settings.stt_model, settings.stt_language, settings.wake_word
+                settings.stt_model, settings.stt_language, settings.wake_word, settings.stt_prompt
             ),
             speaker=Speaker(settings.native_tts_voice, settings.native_tts_rate),
             source_factory=lambda: MicrophoneSource(device),

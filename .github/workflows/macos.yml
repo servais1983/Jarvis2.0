@@ -51,6 +51,7 @@ jobs:
             speak heure "Jarvis, quelle heure est-il ?"
             speak safari "Jarvis, ouvre Safari."
             speak bruit "Il fait beau aujourd'hui à Bruxelles."
+            python scripts/diagnose_stt.py heure.wav safari.wav bruit.wav
             python scripts/check_voice_pipeline.py heure.wav heure
             python scripts/check_voice_pipeline.py safari.wav safari
             # Sans mot d'éveil, aucune commande ne doit partir
@@ -65,6 +66,7 @@ jobs:
           fi
 
       - name: Synthèse vocale réelle
+        if: ${{ !cancelled() }}
         run: |
           python - << 'PY'
           import time
@@ -81,6 +83,7 @@ jobs:
           PY
 
       - name: Agent réel (Ollama + modèle + outils système)
+        if: ${{ !cancelled() }}
         run: |
           brew install ollama
           ollama serve > ollama.log 2>&1 &
@@ -89,6 +92,7 @@ jobs:
           python scripts/check_agent.py
 
       - name: Construction de Jarvis.app
+        if: ${{ !cancelled() }}
         run: PYTHON=python bash packaging/macos/build.sh
 
       - name: Démarrage réel de l'application construite

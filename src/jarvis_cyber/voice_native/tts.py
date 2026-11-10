@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 _VOICE_LINE = re.compile(r"^(.+?)\s{2,}([a-z]{2}[_-][A-Z]{2})\b")
 # Du plus naturel au plus basique parmi les voix françaises de macOS
-_PREFERRED_FR = ("Thomas (Premium)", "Thomas (Enhanced)", "Jacques", "Thomas", "Daniel")
+_PREFERRED_FR = ("Thomas (Premium)", "Thomas (Enhanced)", "Thomas", "Jacques")
 
 
 def clean_for_speech(text: str) -> str:
