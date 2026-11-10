@@ -10,7 +10,7 @@ Commandes : ouvrir apps, navigateur, YouTube, recherche Google
 
 Prérequis :
   pip install speechrecognition pyttsx3 pyaudio requests
-  Installer Ollama : https://ollama.com  puis : ollama pull deepseek-r1
+  Installer Ollama : https://ollama.com  puis : ollama pull llama3.1
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ logger = logging.getLogger("jarvis_vocal")
 WAKE_WORD: str = os.getenv("JARVIS_WAKE_WORD", "jarvis")
 USER_NAME: str = os.getenv("JARVIS_USER_NAME", "Steve")
 OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "deepseek-r1")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 LANGUAGE: str = os.getenv("JARVIS_LANG", "fr-FR")
 SPEECH_RATE: int = int(os.getenv("JARVIS_SPEECH_RATE", "170"))

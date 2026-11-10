@@ -65,6 +65,17 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434", validation_alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1", validation_alias="OLLAMA_MODEL")
     ollama_timeout_seconds: float = 120.0
+    # Voix native (micro permanent + mot d'éveil + transcription locale)
+    native_voice_enabled: bool = False
+    wake_word: str = "jarvis"
+    stt_model: str = "small"
+    stt_language: str = "fr"
+    stt_prompt: str = ""
+    native_tts_voice: str = ""
+    native_tts_rate: int = 185
+    voice_followup_seconds: float = 8.0
+    voice_barge_in: bool = True
+    mic_device: str | None = None
     host: str = "127.0.0.1"
     port: int = 8000
     openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")

@@ -1,0 +1,154 @@
+name: macOS — tests, voix, agent et application
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: Tests réels et Jarvis.app (Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 75
+    env:
+      JARVIS_OLLAMA_MODEL: llama3.2:3b
+      JARVIS_OLLAMA_TIMEOUT_SECONDS: "600"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dépendances
+        run: python -m pip install --disable-pip-version-check -e ".[dev,mcp,native,desktop]" "pyinstaller>=6.6"
+
+      - name: Suite de tests
+        run: python -m pytest -q
+
+      - name: Voix du Mac disponibles
+        run: |
+          say -v '?' | grep -E "fr_|en_US" | head -20
+          VOICE=$(say -v '?' | python -c "import sys; from jarvis_cyber.voice_native.tts import pick_french_voice; print(pick_french_voice(sys.stdin.read()) or '')")
+          echo "Voix française retenue : '${VOICE}'"
+          echo "FR_VOICE=${VOICE}" >> "$GITHUB_ENV"
+
+      - name: Chaîne vocale réelle (voix du Mac → Whisper → mot d'éveil)
+        run: |
+          speak() {  # speak <fichier> <texte>
+            if [ -n "${FR_VOICE}" ]; then say -v "${FR_VOICE}" -o "$1.aiff" "$2"; else say -o "$1.aiff" "$2"; fi
+            afconvert -f WAVE -d LEI16@16000 -c 1 "$1.aiff" "$1.wav"
+          }
+          if [ -n "${FR_VOICE}" ]; then
+            speak heure "Jarvis, quelle heure est-il ?"
+            speak safari "Jarvis, ouvre Safari."
+            speak bruit "Il fait beau aujourd'hui à Bruxelles."
+            python scripts/diagnose_stt.py heure.wav safari.wav bruit.wav
+            python scripts/check_voice_pipeline.py heure.wav heure
+            python scripts/check_voice_pipeline.py safari.wav safari
+            # Sans mot d'éveil, aucune commande ne doit partir
+            if python scripts/check_voice_pipeline.py bruit.wav beau; then
+              echo "Une phrase sans mot d'éveil a déclenché une commande"; exit 1
+            fi
+          else
+            echo "Aucune voix française sur ce runner : vérification en anglais."
+            export JARVIS_STT_LANGUAGE=en
+            speak heure "Jarvis, what time is it?"
+            python scripts/check_voice_pipeline.py heure.wav time
+          fi
+
+      - name: Synthèse vocale réelle
+        if: ${{ !cancelled() }}
+        run: |
+          python - << 'PY'
+          import time
+          from jarvis_cyber.voice_native.tts import Speaker
+          speaker = Speaker()
+          print("voix :", speaker.voice, "| commande :", speaker.command("Bonjour Steve."))
+          done = []
+          assert speaker.speak("Bonjour Steve. Je suis en ligne.", on_done=lambda: done.append(1))
+          deadline = time.time() + 30
+          while not done and time.time() < deadline:
+              time.sleep(0.1)
+          assert done, "la synthèse ne s'est pas terminée"
+          print("SYNTHÈSE: OK")
+          PY
+
+      - name: Agent réel (Ollama + modèle + outils système)
+        if: ${{ !cancelled() }}
+        run: |
+          brew install ollama
+          ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/version && break; sleep 1; done
+          ollama pull "${JARVIS_OLLAMA_MODEL}"
+          python scripts/check_agent.py
+
+      - name: Construction de Jarvis.app
+        if: ${{ !cancelled() }}
+        run: PYTHON=python bash packaging/macos/build.sh
+
+      - name: Démarrage réel de l'application construite
+        run: |
+          APP=dist/Jarvis.app/Contents/MacOS/Jarvis
+          "$APP" --smoke-test --require-voice --data-dir "$RUNNER_TEMP/jarvis-data"
+          "$APP" --transcribe "$PWD/heure.wav" --data-dir "$RUNNER_TEMP/jarvis-data"
+          du -sh dist/Jarvis.app dist/*.zip dist/*.dmg
+
+      - name: Fenêtre réelle de l'application (capture d'écran)
+        continue-on-error: true
+        run: |
+          APP=dist/Jarvis.app/Contents/MacOS/Jarvis
+          "$APP" --data-dir "$RUNNER_TEMP/jarvis-gui" > gui.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8765/health > /dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:8765/health
+          sleep 20
+          screencapture -x jarvis-window.png
+          curl -s http://127.0.0.1:8765/voice/native/status
+          echo; curl -s http://127.0.0.1:8765/system/brain
+          echo; pkill -f "Jarvis.app/Contents/MacOS/Jarvis" || true
+          tail -30 gui.log || true
+          ls -la jarvis-window.png
+          python -m pip install -q --disable-pip-version-check pillow
+          python scripts/check_window_capture.py jarvis-window.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-fenetre
+          path: jarvis-window.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Journal Ollama
+        if: always()
+        run: tail -40 ollama.log || true
+
+      - name: L'installeur contient bien l'application
+        run: |
+          hdiutil attach dist/Jarvis-macOS-arm64.dmg -mountpoint "$RUNNER_TEMP/dmg" -nobrowse -quiet
+          ls -la "$RUNNER_TEMP/dmg"
+          test -x "$RUNNER_TEMP/dmg/Jarvis.app/Contents/MacOS/Jarvis"
+          test -L "$RUNNER_TEMP/dmg/Applications"
+          hdiutil detach "$RUNNER_TEMP/dmg" -quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-macOS-arm64-installeur
+          path: dist/Jarvis-macOS-*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-macOS-arm64
+          path: dist/Jarvis-macOS-*.zip
+          if-no-files-found: error
+          retention-days: 30

@@ -32,6 +32,53 @@ Un vrai Jarvis à la Iron Man : réveil par mot-clé, reconnaissance vocale, LLM
 
 ---
 
+## Application Mac — J.A.R.V.I.S. en fenêtre native
+
+Sur Mac, Jarvis tourne comme une application : une fenêtre, un micro toujours à l'écoute, et la voix du système. On dit « Jarvis, … » sans rien cliquer.
+
+### Lancer
+
+- **Installeur** : dans l'onglet *Actions* du dépôt, ouvrez le dernier run réussi du workflow macOS et téléchargez `Jarvis-macOS-arm64-installeur` (section *Artifacts*). Dézippez, ouvrez le `.dmg`, glissez Jarvis dans *Applications*. Mac Apple Silicon (M1 et suivants), macOS 12 ou plus.
+- **Premier lancement** : l'app n'est pas signée par Apple, macOS la bloque donc une fois. Soit *Réglages Système → Confidentialité et sécurité → Ouvrir quand même* après une première tentative, soit dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Jarvis.app`.
+- **Depuis les sources** : double-cliquez `start_mac.command` (crée le venv, installe, lance).
+- **Construire soi-même** : `bash packaging/macos/build.sh` → `dist/Jarvis.app`.
+
+Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de piloter d'autres applications la première fois que Jarvis en ouvre ou ferme une. Le modèle de transcription (~500 Mo) est téléchargé une fois ; ensuite la reconnaissance vocale fonctionne hors ligne.
+
+### Ce que fait l'application
+
+| Élément | Fonctionnement |
+|---|---|
+| **Mot d'éveil** | « Jarvis, quelle heure est-il ? » — variantes phonétiques acceptées, les phrases sans « Jarvis » sont ignorées |
+| **Conversation suivie** | Après une réponse, 8 secondes pendant lesquelles on peut enchaîner sans redire « Jarvis » |
+| **Initiative** | Jarvis annonce de lui-même une nouvelle approbation en attente ou un nouvel élément dans l'inbox |
+| **Transcription** | faster-whisper, sur le Mac, sans envoi d'audio sur Internet |
+| **Voix** | `say` avec la meilleure voix française installée (Réglages → Accessibilité → Contenu énoncé pour en ajouter de meilleures) |
+| **Contrôle du Mac** | Ouvrir/fermer une application, ouvrir un site, recherche web ou YouTube, volume, musique, état de la machine, notification |
+| **Cerveau** | Ollama est démarré s'il est installé ; le modèle configuré est téléchargé s'il manque |
+| **Données** | `~/Library/Application Support/Jarvis` (base, `mcp_servers.json`, journaux, `.env` éventuel) |
+
+### Limites connues
+
+- On interrompt Jarvis avec la touche Échap, ou à la voix en disant « Jarvis, stop » ou « Jarvis, … » suivi d'une autre demande. Ce qu'il capte de sa propre voix est écarté. Sur haut-parleurs, l'interruption vocale peut ne pas être comprise quand les deux voix se superposent ; au casque elle est fiable. `JARVIS_VOICE_BARGE_IN=false` la désactive.
+- Les questions libres demandent Ollama (`brew install ollama`) et un modèle qui gère les outils (`llama3.1` par défaut, ~5 Go). Sans lui, seules les commandes directes répondent, et Jarvis le dit.
+- L'application n'est ni signée ni notariée par Apple : cela demande un compte développeur Apple.
+
+### Réglages (variables d'environnement ou `.env` dans le dossier de données)
+
+```env
+JARVIS_USER_NAME=Steve
+JARVIS_WAKE_WORD=jarvis
+JARVIS_STT_MODEL=small            # base (plus rapide) · small · medium (plus précis)
+JARVIS_STT_PROMPT=                # vocabulaire à reconnaître, ex. « Jarvis. Figma, Xcode, Notion. »
+JARVIS_NATIVE_TTS_VOICE=          # vide = meilleure voix française trouvée
+JARVIS_NATIVE_TTS_RATE=185
+JARVIS_VOICE_FOLLOWUP_SECONDS=8
+JARVIS_OLLAMA_MODEL=llama3.1
+```
+
+---
+
 ## Assistant Vocal Local — Jarvis pour votre PC
 
 ### Démarrage rapide (Windows)
@@ -52,7 +99,7 @@ start_vocal.bat
 
 1. **Ollama** — moteur LLM local (fonctionne sans internet) :
    - Télécharger : https://ollama.com
-   - Télécharger un modèle : `ollama pull deepseek-r1`
+   - Télécharger un modèle : `ollama pull llama3.1`
    - Laisser Ollama tourner en arrière-plan pendant l'utilisation
 
 2. **PyAudio** — accès au microphone :
@@ -76,7 +123,7 @@ python jarvis_vocal.py
 | **Wake word** | Dites "Jarvis..." pour activer |
 | **Arrêt vocal** | "arrête", "tais-toi", "silence", "stop" |
 | **Reconnaissance vocale** | Google Speech Recognition (fr-FR) |
-| **LLM local** | Ollama — deepseek-r1 / llama3 / mistral (configurable) |
+| **LLM local** | Ollama — llama3.1 / mistral (configurable ; deepseek-r1 ne gère pas les outils) (configurable) |
 | **Fallback** | OpenAI si Ollama n'est pas lancé |
 | **Synthèse vocale** | pyttsx3 — fonctionne 100% hors-ligne |
 | **Mémoire** | Historique conversation, reset après 3 min d'inactivité |
@@ -103,7 +150,7 @@ Variables d'environnement (dans `.env`) :
 
 ```env
 OLLAMA_URL=http://localhost:11434/api/generate
-OLLAMA_MODEL=deepseek-r1
+OLLAMA_MODEL=llama3.1
 JARVIS_WAKE_WORD=jarvis
 JARVIS_USER_NAME=Steve
 JARVIS_LANG=fr-FR
@@ -351,7 +398,7 @@ Il y a deux modes de démarrage selon l'usage :
 start_vocal.bat
 ```
 
-Prérequis : Ollama installé et `ollama pull deepseek-r1` exécuté.  
+Prérequis : Ollama installé et `ollama pull llama3.1` exécuté.  
 Voir la section [Assistant Vocal Local](#assistant-vocal-local--jarvis-pour-votre-pc) ci-dessus.
 
 ### Mode interface web SOC

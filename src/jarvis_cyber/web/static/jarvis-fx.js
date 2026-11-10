@@ -7,6 +7,9 @@
 'use strict';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Lien avec la voix native (micro et synthèse gérés par l'application, pas par le navigateur)
+const NativeLink = { active: false, busy: false, level: 0, speak: null, silence: null };
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 /* ── Horloge, date, accueil ─────────────────────────────── */
@@ -221,7 +224,7 @@ const JarvisOrb = (() => {
       label.textContent = STATE_LABELS[s] || 'EN VEILLE';
       label.dataset.state = s;
     }
-    if (s === 'listening') startMic();
+    if (s === 'listening' && !NativeLink.active) startMic();
     else stopMic();
   }
 
@@ -365,7 +368,11 @@ const JarvisOrb = (() => {
   }
   requestAnimationFrame(draw);
 
-  return { setState, micLevel: () => (state === 'listening' ? micLevel() : 0), getState: () => state };
+  return {
+    setState,
+    micLevel: () => (NativeLink.active ? NativeLink.level : (state === 'listening' ? micLevel() : 0)),
+    getState: () => state,
+  };
 })();
 
 window.JarvisOrb = JarvisOrb;
@@ -484,11 +491,27 @@ function applyBadges() {
   });
 }
 
+// Ce que Jarvis annonce de lui-même quand le compteur augmente
+const ANNOUNCEMENTS = {
+  'win-approbations': n => `${userName}, ${n > 1 ? `${n} approbations attendent` : 'une approbation attend'} ta décision.`,
+  'win-inbox':        n => `${userName}, ${n > 1 ? `${n} nouveaux éléments sont arrivés` : 'un nouvel élément est arrivé'} dans ton inbox.`,
+};
+let badgesLoadedOnce = false;
+
 async function refreshBadges() {
+  const before = { ...badgeCounts };
   await Promise.all(Object.entries(BADGE_SOURCES).map(async ([winId, fn]) => {
     try { badgeCounts[winId] = await fn(); } catch { /* endpoint indisponible */ }
   }));
   applyBadges();
+  if (badgesLoadedOnce) {
+    for (const [winId, phrase] of Object.entries(ANNOUNCEMENTS)) {
+      const gained = (badgeCounts[winId] || 0) - (before[winId] || 0);
+      const quiet = JarvisOrb && ['idle', 'listening'].includes(JarvisOrb.getState());
+      if (gained > 0 && quiet && !NativeLink.busy) { respond(phrase(gained)); break; }
+    }
+  }
+  badgesLoadedOnce = true;
 }
 setInterval(refreshBadges, 60000);
 refreshBadges();
@@ -584,7 +607,7 @@ document.querySelectorAll('.hud-window [data-close]').forEach(btn => {
 });
 if (backdrop) backdrop.addEventListener('click', closeWindow);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeWindow(); closeModesMenu(); }
+  if (e.key === 'Escape') { closeWindow(); closeModesMenu(); JarvisVoice.stop(); }
 });
 
 window.JarvisWindows = { open: openWindow, close: closeWindow };
@@ -653,12 +676,16 @@ const JarvisVoice = (() => {
   }
 
   function resumeAfterSpeech() {
-    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() ? 'listening' : 'idle');
+    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() || NativeLink.active ? 'listening' : 'idle');
   }
 
   function speak(text) {
     const display = String(text).trim();
     showCaption(display.length > 420 ? display.slice(0, 420) + '…' : display);
+    if (NativeLink.active && NativeLink.speak) {
+      NativeLink.speak(display);            // l'état « parle » revient par le flux d'événements
+      return;
+    }
     const spoken = cleanForSpeech(display);
     if (!window.speechSynthesis || !spoken) {
       // Pas de synthèse disponible : on anime l'orb le temps de lecture
@@ -683,6 +710,7 @@ const JarvisVoice = (() => {
   }
 
   function stop() {
+    if (NativeLink.active && NativeLink.silence) NativeLink.silence();
     if (window.speechSynthesis) speechSynthesis.cancel();
     clearInterval(typeTimer);
   }
@@ -790,6 +818,14 @@ async function speakStatus() {
     if (approvals) parts.push(`${approvals} approbation${approvals > 1 ? 's' : ''} en attente.`);
     if (inbox) parts.push(`${inbox} élément${inbox > 1 ? 's' : ''} dans l'inbox.`);
     if (parts.length === 1) parts.push('Rien ne requiert ton attention immédiate.');
+    try {
+      const brain = await fetchJson('/system/brain');
+      if (brain.engine === 'ollama') parts.push(`Mon moteur de langage local ${brain.model} est actif.`);
+      else if (brain.engine === 'openai') parts.push('Je réponds aux questions libres via OpenAI.');
+      else if (brain.pull === 'running') parts.push(`Je télécharge mon modèle de langage ${brain.model}.`);
+      else if (brain.ollama_running) parts.push(`Ollama tourne mais le modèle ${brain.model} n'est pas installé.`);
+      else parts.push("Je n'ai pas de moteur de langage : installe Ollama pour les questions libres.");
+    } catch { /* ancien serveur sans cet état */ }
     respond(parts.join(' '));
   } catch {
     respond('Le serveur ne répond pas. Je fonctionne en mode dégradé.');
@@ -841,7 +877,7 @@ async function askJarvis(rawText) {
   if (/^(stop|silence|chut|tais[- ]toi)\.?$/.test(lower)) {
     JarvisVoice.stop();
     JarvisVoice.showCaption('');
-    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() ? 'listening' : 'idle');
+    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() || NativeLink.active ? 'listening' : 'idle');
     return;
   }
 
@@ -1161,8 +1197,107 @@ const JarvisEars = (() => {
     if (JarvisOrb) JarvisOrb.setState('idle');
   }
 
-  if (micBtn) micBtn.addEventListener('click', () => (on ? stop() : start()));
+  if (micBtn) {
+    micBtn.addEventListener('click', () => {
+      if (NativeVoice.available()) NativeVoice.toggle();
+      else if (on) stop();
+      else start();
+    });
+  }
   return { active: () => on, start, stop };
+})();
+
+/* ── Voix native : micro permanent et mot d'éveil gérés par l'application ── */
+
+const NativeVoice = (() => {
+  const micBtn = document.getElementById('orb-mic');
+  let available = false;
+  let source = null;
+  let greeted = false;
+
+  const post = (path, body) => fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...fxAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+
+  NativeLink.speak = text => post('/voice/native/speak', { text });
+  NativeLink.silence = () => post('/voice/native/silence');
+
+  function applyState(s) {
+    if (!JarvisOrb) return;
+    if (s === 'stopped') { disconnect(); return; }
+    if (s === 'speaking') { JarvisOrb.setState('speaking'); return; }
+    if (s === 'loading') {
+      JarvisOrb.setState('thinking');
+      JarvisVoice.showCaption('Chargement de la reconnaissance vocale…');
+      return;
+    }
+    if (NativeLink.busy) return;                 // une demande est en cours de traitement
+    JarvisOrb.setState(s === 'thinking' ? 'thinking' : 'listening');
+  }
+
+  function onEvent(ev) {
+    if (ev.type === 'level') { NativeLink.level = ev.level; return; }
+    if (ev.type === 'state') { applyState(ev.state); return; }
+    if (ev.type === 'ready') {
+      if (!greeted) {
+        greeted = true;
+        respond(`${greetingWord()}, ${userName}. Je suis en ligne.`);
+      }
+      return;
+    }
+    if (ev.type === 'wake') { respond(`Oui, ${userName} ?`); return; }
+    if (ev.type === 'stop') { JarvisVoice.showCaption(''); return; }
+    if (ev.type === 'command') {
+      NativeLink.busy = true;
+      Promise.resolve(askJarvis(ev.text)).finally(() => { NativeLink.busy = false; });
+      return;
+    }
+    if (ev.type === 'error') {
+      disconnect();
+      JarvisVoice.showCaption(`Voix native indisponible : ${ev.message}`);
+    }
+  }
+
+  function connect() {
+    if (source) return;
+    NativeLink.active = true;
+    if (micBtn) micBtn.classList.add('active');
+    source = new EventSource('/voice/native/events');
+    source.onmessage = e => {
+      try { onEvent(JSON.parse(e.data)); } catch { /* événement illisible */ }
+    };
+  }
+
+  function disconnect() {
+    if (source) { source.close(); source = null; }
+    NativeLink.active = false;
+    NativeLink.level = 0;
+    if (micBtn) micBtn.classList.remove('active');
+    if (JarvisOrb) JarvisOrb.setState('idle');
+  }
+
+  async function toggle() {
+    if (NativeLink.active) {
+      await post('/voice/native/stop');
+      disconnect();
+      return;
+    }
+    const status = await post('/voice/native/start');
+    if (status && status.running) connect();
+    else if (status && status.last_error) JarvisVoice.showCaption(`Voix native indisponible : ${status.last_error}`);
+  }
+
+  (async () => {
+    try {
+      const status = await fetchJson('/voice/native/status');
+      available = status.available;
+      if (status.running) connect();
+    } catch { /* serveur sans voix native */ }
+  })();
+
+  return { available: () => available, toggle };
 })();
 
 /* ── Entrée texte sous l'orb ────────────────────────────── */
@@ -1184,7 +1319,8 @@ if (orbForm && orbInput) {
 const orbClickable = document.getElementById('jarvis-orb');
 if (orbClickable) {
   orbClickable.addEventListener('click', () => {
-    if (JarvisEars.active()) JarvisEars.stop();
+    if (NativeVoice.available()) NativeVoice.toggle();
+    else if (JarvisEars.active()) JarvisEars.stop();
     else JarvisEars.start();
   });
 }

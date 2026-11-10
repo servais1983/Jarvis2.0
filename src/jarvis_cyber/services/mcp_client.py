@@ -118,10 +118,25 @@ class MCPService:
             return sys.executable
         return command
 
+    @classmethod
+    def _resolve_launch(cls, command: str, args: list[str]) -> tuple[str, list[str]]:
+        """Commande et arguments réellement lancés.
+
+        Dans l'application empaquetée il n'y a pas d'interpréteur Python
+        séparé : le binaire de l'app rejoue lui-même le module ou le script
+        demandé (voir jarvis_cyber.desktop).
+        """
+        if command in ("python", "python3") and getattr(sys, "frozen", False):
+            if args[:1] == ["-m"] and len(args) >= 2:
+                return sys.executable, ["--run-module", args[1], *args[2:]]
+            return sys.executable, ["--run-script", *args]
+        return cls._resolve_command(command), list(args)
+
     async def _with_session(self, config: MCPServerConfig, operation):
+        command, args = self._resolve_launch(config.command, config.args)
         params = StdioServerParameters(
-            command=self._resolve_command(config.command),
-            args=config.args,
+            command=command,
+            args=args,
             env=config.env or None,
         )
         async with stdio_client(params) as (read, write):
