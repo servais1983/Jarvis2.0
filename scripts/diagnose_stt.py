@@ -9,6 +9,7 @@ Utile pour régler JARVIS_STT_MODEL ou JARVIS_STT_PROMPT sur votre voix et votre
 from __future__ import annotations
 
 import sys
+import time
 
 from jarvis_cyber.config import settings
 from jarvis_cyber.voice_native.audio import WavFileSource
@@ -36,9 +37,14 @@ def main() -> int:
         for index, audio in enumerate(utterances(path), start=1):
             print(f"  phrase {index} ({len(audio) / 16000:.1f} s)")
             for label, prompt in prompts.items():
+                started = time.monotonic()
                 text = transcriber.transcribe(audio, prompt=prompt)
+                elapsed = time.monotonic() - started
                 result = extract_command(text, settings.wake_word)
-                print(f"    {label:<18} → {text!r}  éveil={result.heard} commande={result.command!r}")
+                print(
+                    f"    {label:<18} {elapsed:4.1f} s → {text!r}  "
+                    f"éveil={result.heard} commande={result.command!r}"
+                )
     return 0
 
 

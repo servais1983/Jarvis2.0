@@ -286,3 +286,92 @@ def test_wake_word_interrupts_speech() -> None:
     engine._handle("Jarvis, ouvre plutôt Safari", during_speech=True)
     assert _drain(subscriber) == [{"type": "command", "text": "ouvre plutôt Safari"}]
     assert speaker.stopped == 1
+
+
+# ── Jarvis ne se répond pas à lui-même ───────────────────────────
+
+
+class TimedSpeaker:
+    """« Parle » pendant les N premières trames lues par le moteur, puis se tait."""
+
+    def __init__(self, speaking_frames: int) -> None:
+        self._remaining = speaking_frames
+        self.stopped = 0
+
+    @property
+    def speaking(self) -> bool:
+        self._remaining -= 1
+        return self._remaining >= 0
+
+    def speak(self, text, on_done=None) -> bool:
+        return True
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+def _own_voice_then_user(tmp_path):
+    """Sa voix (1,2 s, encore audible après la fin du processus de synthèse), puis l'utilisateur."""
+    silence = np.zeros(int(2.5 * SAMPLE_RATE), dtype=np.float32)
+    path = tmp_path / "echo.wav"
+    _write_wav(path, np.concatenate([_tone(1.2), silence, _tone(0.9)]))
+    return path
+
+
+class CountingTranscriber(ScriptedTranscriber):
+    def __init__(self, lines: list[str]) -> None:
+        super().__init__(lines)
+        self.calls = 0
+
+    def transcribe(self, audio) -> str:
+        self.calls += 1
+        return super().transcribe(audio)
+
+
+def _engine_hearing_himself(tmp_path, transcriber, barge_in: bool) -> NativeVoiceEngine:
+    engine = NativeVoiceEngine(
+        transcriber,
+        TimedSpeaker(speaking_frames=45),         # sa voix reste audible ~0,3 s après la synthèse
+        lambda: WavFileSource(_own_voice_then_user(tmp_path)),
+        followup_seconds=3600,
+        barge_in=barge_in,
+    )
+    engine._spoken_text = "Tous les systèmes sont opérationnels."
+    engine._engaged_until = float("inf")          # conversation ouverte : aucun mot d'éveil requis
+    return engine
+
+
+def test_microphone_is_deaf_to_his_own_voice_and_its_tail(tmp_path) -> None:
+    transcriber = CountingTranscriber(["ouvre Safari", "phrase en trop"])
+    engine = _engine_hearing_himself(tmp_path, transcriber, barge_in=False)
+    events = _events(engine, engine.subscribe())
+    assert transcriber.calls == 1                 # la fin de sa phrase n'est même pas transcrite
+    assert [e for e in events if e["type"] == "command"] == [{"type": "command", "text": "ouvre Safari"}]
+
+
+def test_with_voice_interruption_his_own_words_are_not_a_request(tmp_path) -> None:
+    transcriber = CountingTranscriber(["tous les systèmes sont opérationnels", "ouvre Safari"])
+    engine = _engine_hearing_himself(tmp_path, transcriber, barge_in=True)
+    events = _events(engine, engine.subscribe())
+    assert transcriber.calls == 2
+    assert [e for e in events if e["type"] == "command"] == [{"type": "command", "text": "ouvre Safari"}]
+
+
+def test_echo_of_last_answer_is_ignored_even_after_he_stopped() -> None:
+    engine, _speaker, subscriber = _engine_while_speaking("Il est dix-sept heures treize, Steve.")
+    engine._speech_seen_at = __import__("time").monotonic()
+    engine._engaged_until = float("inf")
+    engine._handle("il est dix-sept heures treize Steve")
+    assert _drain(subscriber) == []
+    engine._handle("ouvre Spotify")
+    assert _drain(subscriber) == [{"type": "command", "text": "ouvre Spotify"}]
+
+
+@pytest.mark.parametrize("closer", ["Merci.", "merci beaucoup", "C'est bon", "au revoir"])
+def test_polite_closers_end_the_conversation_without_a_reply(closer: str) -> None:
+    engine, _speaker, subscriber = _engine_while_speaking("")
+    engine._engaged_until = float("inf")
+    engine._handle(closer)
+    assert _drain(subscriber) == []
+    engine._handle("et la météo ?")               # la conversation est refermée
+    assert _drain(subscriber) == [{"type": "heard", "text": "et la météo ?", "addressed": False}]

@@ -125,7 +125,26 @@ def ensure_brain(logger: logging.Logger) -> dict:
         logger.info("Modèle %s absent : téléchargement en arrière-plan.", status["model"])
         pull_model_in_background()
         status = brain_status()
+    elif status["engine"] == "ollama":
+        warm_up_model(logger)
     return status
+
+
+def warm_up_model(logger: logging.Logger) -> None:
+    """Charge le modèle en mémoire dès le lancement, pour que la première réponse soit rapide."""
+    import httpx
+
+    from jarvis_cyber.config import settings
+
+    try:
+        httpx.post(
+            f"{settings.ollama_base_url.rstrip('/')}/api/generate",
+            json={"model": settings.ollama_model, "keep_alive": "30m"},
+            timeout=180,
+        )
+        logger.info("Modèle %s chargé en mémoire.", settings.ollama_model)
+    except httpx.HTTPError as exc:
+        logger.info("Préchargement du modèle impossible : %s", exc)
 
 
 class ServerThread:
@@ -175,7 +194,7 @@ def smoke_test(port: int, require_voice: bool = False) -> int:
         import webview  # noqa: F401  (la fenêtre native doit être embarquée)
 
         report["fenetre"] = True
-    except Exception as exc:
+    except ImportError as exc:
         report["fenetre"] = f"indisponible : {exc}"
     print(json.dumps(report, ensure_ascii=False, indent=2))
     ok = (

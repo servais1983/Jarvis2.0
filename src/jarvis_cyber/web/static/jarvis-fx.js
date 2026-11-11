@@ -10,6 +10,13 @@ const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').mat
 
 // Lien avec la voix native (micro et synthèse gérés par l'application, pas par le navigateur)
 const NativeLink = { active: false, busy: false, level: 0, speak: null, silence: null };
+
+// Chaque lancement démarre une conversation neuve
+const SESSION_ID = `voix-${Date.now().toString(36)}`;
+(() => {
+  const field = document.getElementById('chat-session');
+  if (field) field.value = SESSION_ID;
+})();
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 /* ── Horloge, date, accueil ─────────────────────────────── */
@@ -739,26 +746,6 @@ function logMessage(role, content) {
 
 /* ── Cerveau : intentions et actions réelles ────────────── */
 
-const COMMAND_TARGETS = [
-  [/playbook|m[ée]thode|profil de t[âa]che/, 'win-methodes',      'Playbooks'],
-  [/dossier|file soc|cas\b/,                 'win-dossiers',      'Dossiers'],
-  [/inbox|livrable/,                         'win-inbox',         'Inbox'],
-  [/m[ée]moire|document|connaissance/,       'win-memoire',       'Mémoire'],
-  [/triage|analyste|alerte/,                 'win-triage',        'Triage'],
-  [/cve|vuln[ée]rabilit/,                    'win-cve',           'Analyse CVE'],
-  [/investigation|enqu[êe]te/,               'win-investigation', 'Investigation'],
-  [/rapport|incident/,                       'win-rapport',       'Rapport'],
-  [/veille|vigie|watchlist/,                 'win-veille',        'Veille CVE'],
-  [/routine|automatisation/,                 'win-routines',      'Routines'],
-  [/approbation/,                            'win-approbations',  'Approbations'],
-  [/connecteur/,                             'win-connecteurs',   'Connecteurs'],
-  [/profil\b/,                               'win-profil',        'Profil'],
-  [/s[ée]curit[ée]|mfa|connexion/,           'win-securite',      'Sécurité'],
-  [/console|transcription|historique/,       'win-chat',          'Console'],
-  [/outils?( mcp)?|mcp/,                     'win-mcp',           'Outils MCP'],
-];
-const OPEN_VERB = /^\s*(ouvre|affiche|montre|va (dans|sur))\s+/i;
-
 function respond(text) {
   logMessage('assistant', text);
   JarvisVoice.speak(text);
@@ -832,28 +819,24 @@ async function speakStatus() {
   }
 }
 
-function speakCounts(lower) {
-  const asks = [
-    [/dossier|cas\b/,      'win-dossiers',     n => `Il y a ${n} dossier${n > 1 ? 's' : ''} d'investigation ouvert${n > 1 ? 's' : ''}.`],
-    [/approbation/,        'win-approbations', n => `${n} approbation${n > 1 ? 's' : ''} en attente.`],
-    [/inbox|livrable/,     'win-inbox',        n => `${n} élément${n > 1 ? 's' : ''} dans l'inbox.`],
-    [/document|m[ée]moire/,'win-memoire',      n => `${n} document${n > 1 ? 's' : ''} en mémoire.`],
-    [/playbook/,           'win-methodes',     n => `${n} playbook${n > 1 ? 's' : ''} enregistré${n > 1 ? 's' : ''}.`],
-    [/watchlist|veille/,   'win-veille',       n => `${n} watchlist${n > 1 ? 's' : ''} active${n > 1 ? 's' : ''}.`],
-    [/connecteur/,         'win-connecteurs',  n => `${n} connecteur${n > 1 ? 's' : ''} configuré${n > 1 ? 's' : ''}.`],
-  ];
-  for (const [re, winId, phrase] of asks) {
-    if (re.test(lower)) {
-      const n = badgeCounts[winId] ?? 0;
-      return respond(n > 0 ? phrase(n) : 'Aucun pour le moment.');
-    }
-  }
-  respond("Précise ce que tu veux compter : dossiers, approbations, inbox, documents, playbooks, watchlists ou connecteurs.");
+const COUNT_PHRASES = {
+  'win-dossiers':     n => `Il y a ${n} dossier${n > 1 ? 's' : ''} d'investigation ouvert${n > 1 ? 's' : ''}.`,
+  'win-approbations': n => `${n} approbation${n > 1 ? 's' : ''} en attente.`,
+  'win-inbox':        n => `${n} élément${n > 1 ? 's' : ''} dans l'inbox.`,
+  'win-memoire':      n => `${n} document${n > 1 ? 's' : ''} en mémoire.`,
+  'win-methodes':     n => `${n} playbook${n > 1 ? 's' : ''} enregistré${n > 1 ? 's' : ''}.`,
+  'win-veille':       n => `${n} watchlist${n > 1 ? 's' : ''} active${n > 1 ? 's' : ''}.`,
+  'win-connecteurs':  n => `${n} connecteur${n > 1 ? 's' : ''} configuré${n > 1 ? 's' : ''}.`,
+};
+
+function speakCount(winId) {
+  const n = badgeCounts[winId] ?? 0;
+  respond(n > 0 ? COUNT_PHRASES[winId](n) : 'Aucun pour le moment.');
 }
 
 function chatSessionId() {
   const el = document.getElementById('chat-session');
-  return (el && el.value.trim()) || 'perso';
+  return (el && el.value.trim()) || SESSION_ID;
 }
 
 function resetSession() {
@@ -863,136 +846,86 @@ function resetSession() {
   if (log) log.innerHTML = '';
 }
 
-/* Routeur principal : chaque phrase adressée à l'orb passe ici */
-async function askJarvis(rawText) {
-  // Mot d'éveil : « Jarvis, … » accepté à la voix comme à l'écrit
-  const text = rawText.trim().replace(/^\s*(ok |hey |hé |dis )?jarvis[\s,!:.]+/i, '').trim();
-  if (!text) {
-    if (/jarvis/i.test(rawText)) respond(`Oui, ${userName} ?`);
-    return;
-  }
-  const lower = text.toLowerCase();
+/* Appelle un outil MCP par son nom, quel que soit le serveur qui l'expose.
+   Rend null si aucun serveur connecté ne propose cet outil. */
+async function callTool(name, args) {
+  const tools = await mcpEnsureTools();
+  const tool = tools.find(t => t.name === name);
+  if (!tool) return null;
+  const data = await mcpCall(tool.server, tool.name, args);
+  return data.content || '';
+}
 
-  // Interruption immédiate
-  if (/^(stop|silence|chut|tais[- ]toi)\.?$/.test(lower)) {
-    JarvisVoice.stop();
-    JarvisVoice.showCaption('');
-    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() || NativeLink.active ? 'listening' : 'idle');
-    return;
-  }
+const SOC_ACTIONS = {
+  'daily-brief': ['win-veille',   'daily-brief-form',    'daily-brief-result', 'Je génère le brief quotidien.'],
+  'shift-brief': ['win-dossiers', 'refresh-shift-brief', 'shift-brief-result', 'Je prépare le brief de quart.'],
+  'sla':         ['win-dossiers', 'refresh-sla-watch',   'sla-watch-result',   'Je contrôle les SLA des dossiers.'],
+  'queue':       ['win-dossiers', 'refresh-soc-queue',   'soc-queue-list',     'Voici la file de travail priorisée.'],
+};
 
-  logMessage('user', text);
-  if (JarvisOrb) JarvisOrb.setState('thinking');
-  JarvisVoice.showCaption('…');
-
-  // 1. Navigation : « ouvre les dossiers »
-  if (OPEN_VERB.test(lower)) {
-    const rest = lower.replace(OPEN_VERB, '');
-    for (const [re, winId, label] of COMMAND_TARGETS) {
-      if (re.test(rest)) {
-        openWindow(winId);
-        return respond(`J'ouvre le module ${label}.`);
+/* Exécute une commande directe. Rend false si elle doit finalement aller au modèle. */
+async function runIntent(intent) {
+  switch (intent.kind) {
+    case 'module':
+      openWindow(intent.win);
+      respond(`J'ouvre ${intent.label}.`);
+      return true;
+    case 'tool': {
+      const out = await callTool(intent.tool, intent.args);
+      if (out === null) return false;
+      respond(summarizeResult(out) || "C'est fait.");
+      return true;
+    }
+    case 'calc': {
+      const out = await callTool('calcul', { expression: intent.expression });
+      if (out === null) return false;
+      respond(out);
+      return true;
+    }
+    case 'cve':
+      await runModuleAction('win-cve', 'cve-form', 'cve-result', `J'analyse la ${intent.id}.`, { 'cve-id': intent.id });
+      return true;
+    case 'action':
+      await runModuleAction(...SOC_ACTIONS[intent.name]);
+      return true;
+    case 'status':
+      await speakStatus();
+      return true;
+    case 'count':
+      speakCount(intent.win);
+      return true;
+    case 'time': {
+      const now = new Date();
+      respond(`Il est ${now.getHours()} heures ${String(now.getMinutes()).padStart(2, '0')}, ${userName}.`);
+      return true;
+    }
+    case 'date':
+      respond(`Nous sommes le ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`);
+      return true;
+    case 'identity':
+      respond(`Je suis Jarvis, ton assistant personnel, ${userName}. J'ouvre tes applications, je cherche sur le web, je règle le son, je surveille ta machine et je réponds à tes questions. Côté cybersécurité, j'analyse des vulnérabilités et je tiens tes dossiers.`);
+      return true;
+    case 'new-session':
+      resetSession();
+      respond(`C'est oublié, ${userName}. On repart de zéro.`);
+      return true;
+    case 'tools-list': {
+      const tools = await mcpEnsureTools();
+      if (!tools.length) {
+        respond("Je n'ai aucun outil connecté pour le moment.");
+      } else {
+        openWindow('win-mcp');
+        respond(`J'ai ${tools.length} outil${tools.length > 1 ? 's' : ''} à disposition, affichés à l'écran.`);
       }
+      return true;
     }
+    default:
+      return false;
   }
+}
 
-  // 2. Analyse CVE directe : « analyse CVE-2021-44228 »
-  const cve = text.match(/CVE-\d{4}-\d{4,}/i);
-  if (cve) {
-    return runModuleAction('win-cve', 'cve-form', 'cve-result',
-      `J'analyse la ${cve[0].toUpperCase()}.`, { 'cve-id': cve[0].toUpperCase() });
-  }
-
-  // 3. Opérations SOC
-  if (/brief (du jour|quotidien)|r[ée]sum[ée] (du jour|quotidien)/.test(lower)) {
-    return runModuleAction('win-veille', 'daily-brief-form', 'daily-brief-result',
-      'Je génère le brief quotidien.');
-  }
-  if (/brief de (quart|shift)|handover|rel[èe]ve/.test(lower)) {
-    return runModuleAction('win-dossiers', 'refresh-shift-brief', 'shift-brief-result',
-      'Je prépare le brief de quart.');
-  }
-  if (/\bsla\b|vieillissement/.test(lower)) {
-    return runModuleAction('win-dossiers', 'refresh-sla-watch', 'sla-watch-result',
-      'Je contrôle les SLA des dossiers.');
-  }
-  if (/priorit|file (soc|de travail)|par quoi je commence/.test(lower)) {
-    return runModuleAction('win-dossiers', 'refresh-soc-queue', 'soc-queue-list',
-      'Voici la file de travail priorisée.');
-  }
-
-  // 3 bis. Outils MCP : calculer ou exécuter un outil par son nom (prioritaire
-  // sur le statut, car les noms d'outils peuvent contenir « système », etc.)
-  const calc = text.match(/^calcule[:\s]+(.+)$/i);
-  if (calc) {
-    const tools = await mcpEnsureTools();
-    const tool = tools.find(t => t.name === 'calcul');
-    if (tool) {
-      try {
-        const data = await mcpCall(tool.server, tool.name, { expression: calc[1].trim() });
-        return respond(data.content);
-      } catch (err) {
-        return respond(`L'outil de calcul a échoué : ${err.message || err}`);
-      }
-    }
-    // pas d'outil de calcul : la question part au LLM ci-dessous
-  }
-  const useTool = text.match(/^(?:utilise|ex[ée]cute) l'outil\s+([\w.-]+)\s*(.*)$/i);
-  if (useTool) {
-    const tools = await mcpEnsureTools();
-    const tool = tools.find(t => t.name.toLowerCase() === useTool[1].toLowerCase());
-    if (!tool) return respond(`Je ne trouve pas d'outil MCP nommé « ${useTool[1]} ».`);
-    let args = {};
-    const rawArgs = useTool[2].trim();
-    if (rawArgs) {
-      try {
-        args = JSON.parse(rawArgs);
-      } catch {
-        // Pas du JSON : si l'outil n'attend qu'un seul champ, on lui passe le texte
-        const props = Object.keys((tool.input_schema || {}).properties || {});
-        if (props.length === 1) args = { [props[0]]: rawArgs };
-      }
-    }
-    try {
-      const data = await mcpCall(tool.server, tool.name, args);
-      return respond(summarizeResult(data.content || "L'outil n'a rien renvoyé."));
-    } catch (err) {
-      return respond(`L'appel de « ${tool.name} » a échoué : ${err.message || err}`);
-    }
-  }
-  if (/quels outils|liste (les |tes )?outils/.test(lower)) {
-    const tools = await mcpEnsureTools();
-    if (!tools.length) {
-      return respond("Aucun outil MCP n'est connecté. Configure mcp_servers.json pour m'en donner.");
-    }
-    openWindow('win-mcp');
-    const names = tools.map(t => t.name).join(', ');
-    return respond(`J'ai ${tools.length} outil${tools.length > 1 ? 's' : ''} MCP à disposition : ${names}.`);
-  }
-
-  // 4. Statut & compteurs
-  if (/rapport de situation|statut|status|[ée]tat (du |des |g[ée]n)|es-tu (l[àa]|op[ée]rationnel)|tout va bien|\bsyst[èe]mes?\b/.test(lower)) {
-    return speakStatus();
-  }
-  if (/combien (de|d')/.test(lower)) return speakCounts(lower);
-
-  // 5. Heure, date, identité
-  if (/quelle heure/.test(lower)) {
-    const now = new Date();
-    return respond(`Il est ${now.getHours()} heures ${String(now.getMinutes()).padStart(2, '0')}, ${userName}.`);
-  }
-  if (/quel jour|quelle date/.test(lower)) {
-    return respond(`Nous sommes le ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`);
-  }
-  if (/qui es[- ]tu|pr[ée]sente[- ]toi/.test(lower)) {
-    return respond(`Je suis Jarvis, ton copilote cybersécurité et assistant personnel, ${userName}. Je peux analyser des CVE, trier des alertes, mener des investigations, générer des briefs et piloter tous les modules à l'écran.`);
-  }
-  if (/nouvelle session|r[ée]initialise/.test(lower)) {
-    resetSession();
-    return respond(`Nouvelle session ouverte, ${userName}.`);
-  }
-
-  // 6. Par défaut : le LLM répond (local d'abord, via /chat)
+/* Question libre : le modèle de langage répond (avec ses outils) */
+async function askModel(text) {
   try {
     const res = await fetch('/chat', {
       method: 'POST',
@@ -1003,11 +936,44 @@ async function askJarvis(rawText) {
     const data = await res.json();
     respond(data.answer || "Je n'ai pas de réponse à te donner.");
     if (data.tools_used && data.tools_used.length) {
-      logMessage('assistant', `Outils MCP utilisés : ${data.tools_used.join(', ')}`);
+      logMessage('assistant', `Outils utilisés : ${data.tools_used.join(', ')}`);
     }
   } catch {
-    respond("Je n'arrive pas à joindre le moteur de réponse. Vérifie que le serveur Jarvis est en ligne.");
+    respond("Je n'arrive pas à joindre mon moteur de réponse.");
   }
+}
+
+/* Routeur principal : chaque phrase adressée à l'orb passe ici */
+async function askJarvis(rawText) {
+  // Mot d'éveil : « Jarvis, … » accepté à la voix comme à l'écrit
+  const text = rawText.trim().replace(/^\s*(ok |hey |hé |dis )?jarvis[\s,!:.]+/i, '').trim();
+  if (!text) {
+    if (/jarvis/i.test(rawText)) respond(`Oui, ${userName} ?`);
+    return;
+  }
+  // Commande directe seulement si elle est reconnue sans ambiguïté ; sinon le modèle répond
+  const intent = window.JarvisIntents ? window.JarvisIntents.match(text) : null;
+
+  if (intent && intent.kind === 'stop') {
+    JarvisVoice.stop();
+    JarvisVoice.showCaption('');
+    if (JarvisOrb) JarvisOrb.setState(JarvisEars.active() || NativeLink.active ? 'listening' : 'idle');
+    return;
+  }
+
+  logMessage('user', text);
+  if (JarvisOrb) JarvisOrb.setState('thinking');
+  JarvisVoice.showCaption('…');
+
+  if (intent) {
+    try {
+      if (await runIntent(intent)) return;
+    } catch (err) {
+      respond(`Je n'ai pas pu le faire : ${err.message || err}.`);
+      return;
+    }
+  }
+  await askModel(text);
 }
 
 /* ── Outils MCP : fenêtre de pilotage + appels ──────────── */
@@ -1358,24 +1324,17 @@ if (chatLog) {
   }).observe(chatLog, { childList: true });
 }
 
-// Navigation rapide depuis le formulaire console (« ouvre … »)
+// Formulaire console : les commandes directes y passent par le même routeur que l'orb
 document.addEventListener('submit', e => {
   if (e.target !== document.getElementById('chat-form')) return;
   const input = document.getElementById('chat-message');
-  if (!input) return;
-  const msg = input.value.trim().toLowerCase();
-  if (!OPEN_VERB.test(msg)) return;
-  const rest = msg.replace(OPEN_VERB, '');
-  for (const [re, winId, label] of COMMAND_TARGETS) {
-    if (re.test(rest)) {
-      e.preventDefault();
-      e.stopPropagation();
-      input.value = '';
-      openWindow(winId);
-      respond(`J'ouvre le module ${label}.`);
-      return;
-    }
-  }
+  if (!input || !window.JarvisIntents) return;
+  const message = input.value.trim();
+  if (!window.JarvisIntents.match(message)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  input.value = '';
+  askJarvis(message);
 }, true);
 
 // Le formulaire console déclenche l'état « réflexion » de l'orb

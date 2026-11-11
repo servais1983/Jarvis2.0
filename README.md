@@ -50,7 +50,8 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 | Élément | Fonctionnement |
 |---|---|
 | **Mot d'éveil** | « Jarvis, quelle heure est-il ? » — variantes phonétiques acceptées, les phrases sans « Jarvis » sont ignorées |
-| **Conversation suivie** | Après une réponse, 8 secondes pendant lesquelles on peut enchaîner sans redire « Jarvis » |
+| **Conversation suivie** | Après une réponse, 6 secondes pendant lesquelles on peut enchaîner sans redire « Jarvis » ; « merci » ou « c'est bon » referme la conversation |
+| **Commandes directes** | « ouvre Safari », « mets le volume à 40 », « pause », « cherche … sur YouTube », « quelle heure est-il » s'exécutent tout de suite, sans passer par le modèle. Toute autre phrase part au modèle de langage |
 | **Initiative** | Jarvis annonce de lui-même une nouvelle approbation en attente ou un nouvel élément dans l'inbox |
 | **Transcription** | faster-whisper, sur le Mac, sans envoi d'audio sur Internet |
 | **Voix** | `say` avec la meilleure voix française installée (Réglages → Accessibilité → Contenu énoncé pour en ajouter de meilleures) |
@@ -60,7 +61,9 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 
 ### Limites connues
 
-- On interrompt Jarvis avec la touche Échap, ou à la voix en disant « Jarvis, stop » ou « Jarvis, … » suivi d'une autre demande. Ce qu'il capte de sa propre voix est écarté. Sur haut-parleurs, l'interruption vocale peut ne pas être comprise quand les deux voix se superposent ; au casque elle est fiable. `JARVIS_VOICE_BARGE_IN=false` la désactive.
+- Pendant que Jarvis parle, et un instant après, le micro est ignoré pour qu'il ne prenne jamais sa propre voix pour une demande. On l'interrompt avec la touche Échap. `JARVIS_VOICE_BARGE_IN=true` autorise l'interruption à la voix (« Jarvis, stop ») ; à réserver à un usage au casque, sur haut-parleurs les deux voix se mélangent.
+- **L'intelligence est celle du modèle local.** Un modèle de 8 milliards de paramètres comme `llama3.1` tient une conversation simple et appelle des outils, mais il n'a ni la finesse ni la mémoire du Jarvis du film. Avec 24 Go de mémoire ou plus, un modèle plus gros (`JARVIS_OLLAMA_MODEL=qwen2.5:14b`) répond nettement mieux.
+- **Journal** : chaque phrase entendue et ce que Jarvis en a fait est écrit dans `~/Library/Application Support/Jarvis/logs/jarvis.log` (« Compris », « Ignoré », « Écarté »). C'est le premier endroit où regarder quand il comprend de travers.
 - Les questions libres demandent Ollama (`brew install ollama`) et un modèle qui gère les outils (`llama3.1` par défaut, ~5 Go). Sans lui, seules les commandes directes répondent, et Jarvis le dit.
 - L'application n'est ni signée ni notariée par Apple : cela demande un compte développeur Apple.
 
@@ -73,7 +76,8 @@ JARVIS_STT_MODEL=small            # base (plus rapide) · small · medium (plus 
 JARVIS_STT_PROMPT=                # vocabulaire à reconnaître, ex. « Jarvis. Figma, Xcode, Notion. »
 JARVIS_NATIVE_TTS_VOICE=          # vide = meilleure voix française trouvée
 JARVIS_NATIVE_TTS_RATE=185
-JARVIS_VOICE_FOLLOWUP_SECONDS=8
+JARVIS_VOICE_FOLLOWUP_SECONDS=6
+JARVIS_OLLAMA_NUM_CTX=8192        # contexte donné au modèle local
 JARVIS_OLLAMA_MODEL=llama3.1
 ```
 

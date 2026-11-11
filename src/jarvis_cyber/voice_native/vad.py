@@ -16,7 +16,7 @@ class UtteranceSegmenter:
         frame_ms: int = 30,
         start_ms: int = 90,
         end_silence_ms: int = 750,
-        min_speech_ms: int = 250,
+        min_speech_ms: int = 350,
         max_utterance_s: float = 15.0,
         pre_roll_ms: int = 300,
         threshold_ratio: float = 3.0,

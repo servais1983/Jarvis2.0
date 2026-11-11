@@ -65,6 +65,18 @@ jobs:
             python scripts/check_voice_pipeline.py heure.wav time
           fi
 
+      - name: Comparaison des modèles de transcription (information)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          speak() { say -v "${FR_VOICE}" -o "$1.aiff" "$2"; afconvert -f WAVE -d LEI16@16000 -c 1 "$1.aiff" "$1.wav"; }
+          speak long "Jarvis, peux-tu me rappeler ce que j'ai prévu demain matin et ouvrir Spotify ?"
+          speak nombres "Jarvis, mets le volume à quarante pour cent."
+          for model in base small large-v3-turbo; do
+            echo "=== $model ==="
+            JARVIS_STT_MODEL=$model python scripts/diagnose_stt.py safari.wav long.wav nombres.wav 2>&1 | grep -v "sans amorce\|amorce ouverte\|Warning"
+          done
+
       - name: Synthèse vocale réelle
         if: ${{ !cancelled() }}
         run: |

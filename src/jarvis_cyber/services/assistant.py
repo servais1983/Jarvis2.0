@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import time
+from datetime import datetime
 from typing import Callable, TypeVar
 
 from openai import OpenAI, OpenAIError
@@ -14,6 +16,7 @@ from jarvis_cyber.knowledge.store import knowledge_store
 from jarvis_cyber.memory.store import memory_store
 from jarvis_cyber.playbooks.store import playbook_store
 from jarvis_cyber.profile.store import profile_store
+from jarvis_cyber.services.brain import brain_status
 from jarvis_cyber.services.connector_context import connector_context_service
 from jarvis_cyber.services.local_agent import (
     LocalAgentUnavailableError,
@@ -23,6 +26,9 @@ from jarvis_cyber.services.tool_catalog import tool_catalog_service
 
 logger = logging.getLogger(__name__)
 
+
+_LOCAL_HISTORY_TURNS = 8
+_FALLBACK_REMINDER_SECONDS = 600
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
 
@@ -88,9 +94,26 @@ class AssistantService:
         )
         history_payload = [{"role": turn.role, "content": turn.content} for turn in history]
 
-        # 1) Moteur local d'abord : Ollama, avec les outils MCP à sa disposition
-        local_result = self._try_local_agent(message, history_payload, instructions)
+        # 1) Moteur local d'abord : Ollama, avec les outils MCP à sa disposition.
+        # Un petit modèle se perd dans un long prompt : il reçoit l'essentiel, et
+        # seulement les derniers échanges.
+        started = time.monotonic()
+        local_result = self._try_local_agent(
+            message,
+            history_payload[-_LOCAL_HISTORY_TURNS:],
+            self._conversation_prompt(
+                user_id, playbook_context, inbox_context, context_block, bool(knowledge_chunks)
+            ),
+        )
         if local_result is not None:
+            logger.info(
+                "Réponse %s en %.1f s, outils %s : %r → %r",
+                local_result.model,
+                time.monotonic() - started,
+                local_result.tools_used,
+                message[:120],
+                local_result.answer[:160],
+            )
             memory_store.append(
                 user_id=user_id,
                 session_id=session_id,
@@ -108,13 +131,8 @@ class AssistantService:
 
         # 2) Modèle distant OpenAI si configuré
         if self._client is None:
+            # Non mémorisé : un message de repli répété embrouillerait le modèle ensuite
             answer = self._local_chat_fallback(message, len(knowledge_hits))
-            memory_store.append(
-                user_id=user_id,
-                session_id=session_id,
-                role="assistant",
-                content=answer,
-            )
             return answer, settings.main_model, False, knowledge_hits, citations, []
 
         try:
@@ -125,13 +143,8 @@ class AssistantService:
                 history=history_payload,
             )
         except OpenAIError:
+            # Non mémorisé : un message de repli répété embrouillerait le modèle ensuite
             answer = self._local_chat_fallback(message, len(knowledge_hits))
-            memory_store.append(
-                user_id=user_id,
-                session_id=session_id,
-                role="assistant",
-                content=answer,
-            )
             return answer, settings.main_model, False, knowledge_hits, citations, []
         answer = response.output_text
         memory_store.append(
@@ -141,6 +154,41 @@ class AssistantService:
             content=answer,
         )
         return answer, settings.main_model, True, knowledge_hits, citations, []
+
+    @classmethod
+    def _conversation_prompt(
+        cls,
+        user_id: str,
+        playbook_context: str,
+        inbox_context: str,
+        knowledge_context: str,
+        has_knowledge: bool,
+    ) -> str:
+        """Prompt du modèle local : qui il est, la date, quand utiliser un outil."""
+        name = profile_store.get(user_id).display_name or settings.user_name
+        now = datetime.now()
+        parts = [
+            f"Tu es Jarvis, l'assistant personnel de {name}, dans l'esprit de celui d'Iron Man : "
+            "calme, précis, un peu d'esprit, jamais bavard.",
+            f"Nous sommes le {now.strftime('%d/%m/%Y')} et il est {now.strftime('%H:%M')}.",
+            "Tu disposes d'outils pour agir sur son ordinateur : ouvrir une application ou un "
+            "site, chercher sur le web, régler le son, lire l'état de la machine, calculer. "
+            "Appelle un outil uniquement quand la demande l'exige. Pour une question de "
+            "culture générale, un avis ou une conversation, réponds directement, sans outil. "
+            "N'invente jamais le résultat d'un outil et n'annonce pas une action que tu n'as "
+            "pas faite. Si tu ne sais pas ou si tu as mal compris, dis-le en une phrase et "
+            "demande de préciser.",
+            "Réponds à la dernière demande seulement, sans répéter ce que tu as déjà dit.",
+            "Tu es aussi compétent en cybersécurité quand on t'en parle.",
+            cls._spoken_style(user_id),
+        ]
+        if has_knowledge:
+            parts.append(f"Extraits de sa base documentaire, à citer [S1], [S2] :\n{knowledge_context}")
+        if not playbook_context.startswith("Aucun playbook"):
+            parts.append(f"Ses procédures qui peuvent s'appliquer :\n{playbook_context}")
+        if not inbox_context.startswith("Aucun élément"):
+            parts.append(f"Éléments non lus dans son inbox :\n{inbox_context}")
+        return "\n\n".join(parts)
 
     @staticmethod
     def _spoken_style(user_id: str) -> str:
@@ -270,18 +318,51 @@ class AssistantService:
             f"Contenu reçu : {preview}"
         )
 
-    @staticmethod
-    def _local_chat_fallback(message: str, knowledge_hit_count: int) -> str:
-        found = (
-            f" J'ai trouvé {knowledge_hit_count} extrait(s) dans ta base documentaire."
-            if knowledge_hit_count
-            else ""
-        )
-        return (
-            "Je fonctionne en mode local, sans moteur de langage : je ne peux pas répondre "
-            "à cette question libre. Lance Ollama pour me donner un cerveau ; mes commandes "
-            f"directes restent disponibles.{found}"
-        )
+    # Dernière cause de repli annoncée, pour ne pas redire la même explication à chaque question
+    _last_fallback: tuple[str, float] = ("", float("-inf"))
+
+    @classmethod
+    def _local_chat_fallback(cls, message: str, knowledge_hit_count: int) -> str:
+        """Phrase dite quand aucun modèle n'a pu répondre : elle nomme la vraie cause."""
+        brain = brain_status()
+        if brain["engine"] == "ollama":
+            cause = "timeout"
+            full = "Mon moteur de langage n'a pas répondu à temps. Redemande-moi."
+            short = full
+        elif brain["pull"] == "running":
+            cause = "pull"
+            full = (
+                f"Je télécharge encore mon modèle de langage {brain['model']}. "
+                "Mes commandes directes fonctionnent déjà ; pour le reste, redemande-moi "
+                "dans quelques minutes."
+            )
+            short = "Mon modèle de langage est toujours en cours de téléchargement."
+        elif brain["ollama_running"]:
+            cause = "missing"
+            full = (
+                f"Ollama tourne, mais le modèle {brain['model']} n'est pas installé : "
+                "je ne peux pas répondre à cette question libre."
+            )
+            short = f"Le modèle {brain['model']} n'est toujours pas installé."
+        else:
+            cause = "none"
+            found = (
+                f" J'ai trouvé {knowledge_hit_count} extrait(s) dans ta base documentaire."
+                if knowledge_hit_count
+                else ""
+            )
+            full = (
+                "Je fonctionne en mode local, sans moteur de langage : je ne peux pas répondre "
+                "à cette question libre. Lance Ollama pour me donner un cerveau ; mes commandes "
+                f"directes restent disponibles.{found}"
+            )
+            short = "Je n'ai toujours pas de moteur de langage pour répondre à ça."
+
+        previous_cause, previous_at = cls._last_fallback
+        now = time.monotonic()
+        cls._last_fallback = (cause, now)
+        repeated = previous_cause == cause and now - previous_at < _FALLBACK_REMINDER_SECONDS
+        return short if repeated else full
 
     @staticmethod
     def _format_knowledge_context(chunks: list) -> str:

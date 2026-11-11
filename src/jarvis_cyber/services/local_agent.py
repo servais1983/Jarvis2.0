@@ -38,6 +38,32 @@ class LocalAgentUnavailableError(Exception):
     """Ollama injoignable ou en erreur : passer au moteur suivant."""
 
 
+def _clean_answer(text: str) -> str:
+    """Retire le raisonnement interne que certains modèles laissent dans leur réponse."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"</?think>", "", text)
+    return text.strip()
+
+
+def _tool_call_written_as_text(content: str, index: dict) -> dict | None:
+    """Reconnaît `{"name": "systeme__calcul", "parameters": {...}}` écrit en clair."""
+    text = _clean_answer(content)
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if match is None:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    name = payload.get("name") or (payload.get("function") or {}).get("name")
+    if name not in index:
+        return None
+    arguments = payload.get("parameters") or payload.get("arguments") or {}
+    return {"name": name, "arguments": arguments if isinstance(arguments, dict) else {}}
+
+
 def _sanitize(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
@@ -126,7 +152,18 @@ class LocalAgentService:
         if not history or history[-1].get("content") != message:
             messages.append({"role": "user", "content": message})
 
-        payload_base = {"model": settings.ollama_model, "stream": False}
+        payload_base = {
+            "model": settings.ollama_model,
+            "stream": False,
+            "keep_alive": "30m",
+            # Le contexte par défaut d'Ollama est trop petit pour le prompt, les outils et
+            # l'historique : tronqué, le modèle s'emmêle et se répète.
+            "options": {
+                "num_ctx": settings.ollama_num_ctx,
+                "temperature": 0.4,
+                "repeat_penalty": 1.15,
+            },
+        }
         if definitions:
             payload_base["tools"] = definitions
 
@@ -145,7 +182,13 @@ class LocalAgentService:
                 reply = response.json().get("message", {})
                 tool_calls = reply.get("tool_calls") or []
                 if not tool_calls:
-                    answer = (reply.get("content") or "").strip()
+                    # Les petits modèles écrivent parfois l'appel d'outil dans leur texte
+                    written = _tool_call_written_as_text(reply.get("content") or "", index)
+                    if written is not None:
+                        tool_calls = [{"function": written}]
+                        reply = {"role": "assistant", "content": "", "tool_calls": tool_calls}
+                if not tool_calls:
+                    answer = _clean_answer(reply.get("content") or "")
                     if not answer:
                         raise LocalAgentUnavailableError("Réponse vide du modèle local.")
                     return LocalAgentResult(

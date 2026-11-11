@@ -74,7 +74,15 @@ class WhisperTranscriber:
             condition_on_previous_text=False,
             initial_prompt=used_prompt or None,
         )
-        parts = [s.text.strip() for s in segments if s.no_speech_prob < 0.6]
+        parts = []
+        for segment in segments:
+            # Silence, transcription peu sûre ou texte qui boucle : on n'en fait pas une demande
+            if segment.no_speech_prob >= 0.6:
+                continue
+            if segment.avg_logprob < -1.0 or segment.compression_ratio > 2.4:
+                logger.info("Transcription écartée (peu fiable) : %r", segment.text)
+                continue
+            parts.append(segment.text.strip())
         text = " ".join(p for p in parts if p).strip()
         return "" if self.is_hallucination(text, used_prompt) else text
 
