@@ -44,6 +44,9 @@ native = [
 desktop = [
   "pywebview>=5.0",
 ]
+claude = [
+  "anthropic>=2.0,<3",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jarvis_cyber"]

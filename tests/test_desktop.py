@@ -68,3 +68,32 @@ def test_chat_fallback_is_a_sentence_jarvis_can_say() -> None:
     answer = client.post("/chat", json={"session_id": "voix", "message": "Raconte-moi une blague"}).json()["answer"]
     assert "Ollama" in answer
     assert "extrait(s)" not in answer and "Demande reçue" not in answer
+
+
+def test_api_key_is_saved_privately_and_replaced_not_duplicated(tmp_path) -> None:
+    (tmp_path / ".env").write_text("JARVIS_USER_NAME=Steve\nANTHROPIC_API_KEY=ancienne\n", encoding="utf-8")
+    env_file = desktop.save_env_value(tmp_path, "ANTHROPIC_API_KEY", "nouvelle")
+    assert env_file.read_text(encoding="utf-8") == "JARVIS_USER_NAME=Steve\nANTHROPIC_API_KEY=nouvelle\n"
+    assert env_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_configure_claude_refuses_an_empty_key(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: "  ")
+    assert desktop.configure_claude(tmp_path) == 1
+    assert not (tmp_path / ".env").exists()
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: " sk-ant-test ")
+    monkeypatch.setattr(desktop, "check_claude", lambda: 0)   # pas d'appel réel dans les tests
+    from jarvis_cyber.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    assert desktop.configure_claude(tmp_path) == 0
+    assert settings.anthropic_api_key.get_secret_value() == "sk-ant-test"
+    assert "ANTHROPIC_API_KEY=sk-ant-test" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_check_claude_reports_when_no_key_is_configured(monkeypatch, capsys) -> None:
+    from jarvis_cyber.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    assert desktop.check_claude() == 1
+    assert "--configure-claude" in capsys.readouterr().out

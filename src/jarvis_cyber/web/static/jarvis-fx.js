@@ -807,7 +807,8 @@ async function speakStatus() {
     if (parts.length === 1) parts.push('Rien ne requiert ton attention immédiate.');
     try {
       const brain = await fetchJson('/system/brain');
-      if (brain.engine === 'ollama') parts.push(`Mon moteur de langage local ${brain.model} est actif.`);
+      if (brain.engine === 'claude') parts.push(brain.claude_error ? `Claude est configuré mais ne répond pas. ${brain.claude_error}` : 'Je réponds avec Claude.');
+      else if (brain.engine === 'ollama') parts.push(`Mon moteur de langage local ${brain.model} est actif.`);
       else if (brain.engine === 'openai') parts.push('Je réponds aux questions libres via OpenAI.');
       else if (brain.pull === 'running') parts.push(`Je télécharge mon modèle de langage ${brain.model}.`);
       else if (brain.ollama_running) parts.push(`Ollama tourne mais le modèle ${brain.model} n'est pas installé.`);

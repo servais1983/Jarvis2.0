@@ -24,6 +24,7 @@ for package in (
     "_sounddevice_data",
     "webview",
     "mcp",
+    "anthropic",
     "pydantic_settings",
     "tzdata",
 ):

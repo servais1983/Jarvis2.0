@@ -17,6 +17,7 @@ from jarvis_cyber.memory.store import memory_store
 from jarvis_cyber.playbooks.store import playbook_store
 from jarvis_cyber.profile.store import profile_store
 from jarvis_cyber.services.brain import brain_status
+from jarvis_cyber.services.claude_agent import ClaudeUnavailableError, claude_agent_service
 from jarvis_cyber.services.connector_context import connector_context_service
 from jarvis_cyber.services.local_agent import (
     LocalAgentUnavailableError,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 _LOCAL_HISTORY_TURNS = 8
+_CLAUDE_HISTORY_TURNS = 24
 _FALLBACK_REMINDER_SECONDS = 600
 
 StructuredModelT = TypeVar("StructuredModelT", bound=BaseModel)
@@ -98,12 +100,14 @@ class AssistantService:
         # Un petit modèle se perd dans un long prompt : il reçoit l'essentiel, et
         # seulement les derniers échanges.
         started = time.monotonic()
-        local_result = self._try_local_agent(
-            message,
-            history_payload[-_LOCAL_HISTORY_TURNS:],
-            self._conversation_prompt(
-                user_id, playbook_context, inbox_context, context_block, bool(knowledge_chunks)
-            ),
+        conversation_prompt = self._conversation_prompt(
+            user_id, playbook_context, inbox_context, context_block, bool(knowledge_chunks)
+        )
+        # Claude d'abord s'il est configuré, sinon le modèle local
+        local_result = self._try_claude(
+            message, history_payload[-_CLAUDE_HISTORY_TURNS:], conversation_prompt
+        ) or self._try_local_agent(
+            message, history_payload[-_LOCAL_HISTORY_TURNS:], conversation_prompt
         )
         if local_result is not None:
             logger.info(
@@ -123,7 +127,7 @@ class AssistantService:
             return (
                 local_result.answer,
                 local_result.model,
-                False,
+                local_result.model.startswith("claude/"),
                 knowledge_hits,
                 citations,
                 local_result.tools_used,
@@ -201,6 +205,24 @@ class AssistantService:
             f"détail. Tu t'adresses à {name} par son prénom. Quand un outil te donne un "
             "résultat, dis-le simplement sans décrire l'outil."
         )
+
+    @staticmethod
+    def _try_claude(message: str, history: list[dict], system_prompt: str):
+        """Tente une réponse via Claude + outils MCP ; None si non configuré ou en échec."""
+        if not claude_agent_service.enabled:
+            return None
+        try:
+            return asyncio.run(
+                claude_agent_service.chat(
+                    message=message, history=history, system_prompt=system_prompt
+                )
+            )
+        except ClaudeUnavailableError as exc:
+            logger.warning("Claude indisponible, repli sur le modèle local : %s", exc)
+            return None
+        except Exception as exc:  # le chat ne doit jamais casser pour un souci distant
+            logger.warning("Claude en erreur : %s", exc, exc_info=True)
+            return None
 
     @staticmethod
     def _try_local_agent(message: str, history: list[dict], system_prompt: str):
@@ -325,7 +347,11 @@ class AssistantService:
     def _local_chat_fallback(cls, message: str, knowledge_hit_count: int) -> str:
         """Phrase dite quand aucun modèle n'a pu répondre : elle nomme la vraie cause."""
         brain = brain_status()
-        if brain["engine"] == "ollama":
+        if brain.get("claude_error") and brain["engine"] == "claude":
+            cause = "claude"
+            full = f"Je n'arrive pas à joindre Claude. {brain['claude_error']}"
+            short = "Claude ne répond toujours pas."
+        elif brain["engine"] == "ollama":
             cause = "timeout"
             full = "Mon moteur de langage n'a pas répondu à temps. Redemande-moi."
             short = full

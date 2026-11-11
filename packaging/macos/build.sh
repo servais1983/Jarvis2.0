@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 PYTHON="${PYTHON:-python3}"
-"$PYTHON" -m pip install --disable-pip-version-check -q ".[mcp,native,desktop]" "pyinstaller>=6.6"
+"$PYTHON" -m pip install --disable-pip-version-check -q ".[mcp,native,desktop,claude]" "pyinstaller>=6.6"
 rm -rf build dist
 "$PYTHON" -m PyInstaller --noconfirm packaging/macos/Jarvis.spec
 

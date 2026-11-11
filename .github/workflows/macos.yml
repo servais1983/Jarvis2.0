@@ -29,7 +29,7 @@ jobs:
           cache: pip
 
       - name: Dépendances
-        run: python -m pip install --disable-pip-version-check -e ".[dev,mcp,native,desktop]" "pyinstaller>=6.6"
+        run: python -m pip install --disable-pip-version-check -e ".[dev,mcp,native,desktop,claude]" "pyinstaller>=6.6"
 
       - name: Suite de tests
         run: python -m pytest -q

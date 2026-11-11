@@ -59,6 +59,28 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 | **Cerveau** | Ollama est démarré s'il est installé ; le modèle configuré est téléchargé s'il manque |
 | **Données** | `~/Library/Application Support/Jarvis` (base, `mcp_servers.json`, journaux, `.env` éventuel) |
 
+### Cerveau : Claude ou modèle local
+
+Les commandes directes (ouvrir une application, volume, heure…) ne passent par aucun modèle. Tout le reste est répondu par un moteur de langage, dans cet ordre : **Claude** s'il est configuré, sinon le **modèle local Ollama**, sinon OpenAI si une clé est présente.
+
+**Claude (recommandé pour l'intelligence).** Jarvis utilise `claude-opus-5-5` avec les mêmes outils que le modèle local.
+
+```bash
+/Applications/Jarvis.app/Contents/MacOS/Jarvis --configure-claude    # saisie masquée de la clé
+/Applications/Jarvis.app/Contents/MacOS/Jarvis --check-claude        # revérifier plus tard
+```
+
+La clé se crée sur console.anthropic.com et est enregistrée dans `~/Library/Application Support/Jarvis/.env`, lisible par vous seul. À savoir avant de l'activer :
+
+- c'est un service **payant à l'usage** (4 $ par million de jetons en entrée, 20 $ en sortie pour ce modèle ; une question vocale courte coûte de l'ordre d'un centime) ;
+- le **texte** de vos demandes et les résultats d'outils sont envoyés à Anthropic ; l'audio du micro, lui, est transcrit sur le Mac et n'en sort pas ;
+- si une demande est déclinée par les filtres de sécurité du modèle, l'API la rejoue automatiquement sur un modèle de repli (`fallbacks: "default"`) ;
+- si Claude est injoignable (réseau, clé refusée, quota), Jarvis le dit et bascule sur le modèle local.
+
+Réglages : `JARVIS_CLAUDE_MODEL` (défaut `claude-opus-5-5`), `JARVIS_CLAUDE_EFFORT` (défaut `low`, pour des réponses rapides ; `medium` ou `high` pour plus de réflexion).
+
+**Modèle local.** Gratuit et entièrement sur le Mac. `llama3.1` par défaut ; avec 24 Go de mémoire ou plus, `JARVIS_OLLAMA_MODEL=qwen2.5:14b` répond nettement mieux (`ollama pull qwen2.5:14b`).
+
 ### Limites connues
 
 - Pendant que Jarvis parle, et un instant après, le micro est ignoré pour qu'il ne prenne jamais sa propre voix pour une demande. On l'interrompt avec la touche Échap. `JARVIS_VOICE_BARGE_IN=true` autorise l'interruption à la voix (« Jarvis, stop ») ; à réserver à un usage au casque, sur haut-parleurs les deux voix se mélangent.

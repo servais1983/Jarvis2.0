@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="llama3.1", validation_alias="OLLAMA_MODEL")
     ollama_timeout_seconds: float = 120.0
     ollama_num_ctx: int = 8192
+    # Cerveau Claude (facultatif) : activé quand une clé ANTHROPIC_API_KEY est fournie
+    anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    claude_model: str = "claude-opus-5-5"
+    claude_effort: str = "low"
+    claude_timeout_seconds: float = 60.0
     # Voix native (micro permanent + mot d'éveil + transcription locale)
     native_voice_enabled: bool = False
     wake_word: str = "jarvis"
@@ -92,6 +97,7 @@ class Settings(BaseSettings):
         "defender_access_token",
         "sentinel_access_token",
         "openai_api_key",
+        "anthropic_api_key",
         mode="before",
     )
     @classmethod

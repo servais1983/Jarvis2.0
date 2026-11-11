@@ -77,6 +77,64 @@ def configure_environment(base: Path | None = None, native_voice: bool = True) -
     return base
 
 
+def save_env_value(base: Path, name: str, value: str) -> Path:
+    """Écrit `NOM=valeur` dans le .env du dossier de données, lisible par l'utilisateur seul."""
+    env_file = base / ".env"
+    lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+    lines = [line for line in lines if not line.startswith(f"{name}=")]
+    lines.append(f"{name}={value}")
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    return env_file
+
+
+def configure_claude(base: Path) -> int:
+    """Demande la clé API Anthropic dans le terminal (saisie masquée) et l'enregistre."""
+    import getpass
+
+    print("Clé API Anthropic (console.anthropic.com → API keys). La saisie est masquée.")
+    key = getpass.getpass("Clé : ").strip()
+    if not key:
+        print("Aucune clé saisie : rien n'a été modifié.")
+        return 1
+    env_file = save_env_value(base, "ANTHROPIC_API_KEY", key)
+    print(f"Clé enregistrée dans {env_file}.")
+
+    from pydantic import SecretStr
+
+    from jarvis_cyber.config import settings
+
+    settings.anthropic_api_key = SecretStr(key)
+    return check_claude()
+
+
+def check_claude() -> int:
+    """Envoie une vraie question à Claude et affiche la réponse ou la cause exacte de l'échec."""
+    import asyncio
+
+    from jarvis_cyber.config import settings
+    from jarvis_cyber.services.claude_agent import ClaudeUnavailableError, claude_agent_service
+
+    if not claude_agent_service.enabled:
+        print("Claude n'est pas configuré : lancez d'abord --configure-claude.")
+        return 1
+    print(f"Appel de {settings.claude_model}…")
+    try:
+        result = asyncio.run(
+            claude_agent_service.chat(
+                message="Dis simplement que tu es en ligne, en une phrase.",
+                history=[],
+                system_prompt="Tu es Jarvis, un assistant vocal. Réponds en français.",
+            )
+        )
+    except ClaudeUnavailableError as exc:
+        print(f"ÉCHEC : {exc}")
+        return 1
+    print(f"OK ({result.model}) : {result.answer}")
+    print("Relancez Jarvis : il répondra désormais avec Claude.")
+    return 0
+
+
 def find_free_port(preferred: int = DEFAULT_PORT) -> int:
     for port in (preferred, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -191,6 +249,12 @@ def smoke_test(port: int, require_voice: bool = False) -> int:
         report["voix"] = {k: voice[k] for k in ("available", "missing", "tts_available", "tts_voice")}
         report["cerveau"] = client.get("/system/brain").json()
     try:
+        import anthropic  # noqa: F401  (le cerveau Claude doit être embarqué)
+
+        report["sdk_claude"] = True
+    except ImportError as exc:
+        report["sdk_claude"] = f"indisponible : {exc}"
+    try:
         import webview  # noqa: F401  (la fenêtre native doit être embarquée)
 
         report["fenetre"] = True
@@ -206,6 +270,7 @@ def smoke_test(port: int, require_voice: bool = False) -> int:
         and report["outil_calcul"] == "(21*2)+8 = 50"
         and (report["voix"]["available"] or not require_voice)
         and (report["fenetre"] is True or not require_voice)
+        and (report["sdk_claude"] is True or not require_voice)
     )
     print("SMOKE TEST:", "OK" if ok else "ÉCHEC")
     return 0 if ok else 1
@@ -215,6 +280,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog=APP_NAME, add_help=True)
     parser.add_argument("--headless", action="store_true", help="serveur seul, sans fenêtre")
     parser.add_argument("--smoke-test", action="store_true", help="vérifie le démarrage puis quitte")
+    parser.add_argument(
+        "--configure-claude", action="store_true", help="enregistre la clé API Anthropic"
+    )
+    parser.add_argument(
+        "--check-claude", action="store_true", help="vérifie que Claude répond avec la clé enregistrée"
+    )
     parser.add_argument("--require-voice", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--transcribe", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -234,8 +305,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     base = configure_environment(
-        args.data_dir, native_voice=not (args.smoke_test or args.transcribe)
+        args.data_dir, native_voice=not (args.smoke_test or args.transcribe or args.configure_claude or args.check_claude)
     )
+
+    if args.configure_claude:
+        return configure_claude(base)
+    if args.check_claude:
+        return check_claude()
 
     # Vérification de la transcription depuis l'application installée
     if args.transcribe:

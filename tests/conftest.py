@@ -18,6 +18,9 @@ os.environ["JARVIS_DATABASE_PATH"] = str(_tmp / "jarvis-tests.db")
 # tests : on pointe l'agent local vers un port toujours fermé.
 os.environ["JARVIS_OLLAMA_BASE_URL"] = "http://127.0.0.1:9"
 
+# Une vraie clé présente sur la machine ne doit jamais faire partir une requête payante
+os.environ["ANTHROPIC_API_KEY"] = ""
+
 
 import pytest  # noqa: E402
 

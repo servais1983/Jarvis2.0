@@ -44,7 +44,14 @@ def brain_status() -> dict:
         status["model_present"] = any(model_matches(n, settings.ollama_model) for n in names)
     except (httpx.HTTPError, ValueError):
         pass
-    if status["ollama_running"] and status["model_present"]:
+    from jarvis_cyber.services.claude_agent import claude_agent_service
+
+    status["claude_configured"] = claude_agent_service.enabled
+    status["claude_model"] = settings.claude_model
+    status["claude_error"] = claude_agent_service.last_error
+    if status["claude_configured"]:
+        status["engine"] = "claude"
+    elif status["ollama_running"] and status["model_present"]:
         status["engine"] = "ollama"
     elif status["openai_configured"]:
         status["engine"] = "openai"

@@ -105,7 +105,7 @@
     }
 
     // Son et musique
-    m = text.match(/^(?:mets|r[èe]gle|monte|baisse)? ?(?:le )?(?:volume|son) (?:à|a|sur) (\d{1,3})(?: ?%| pour ?cent)?$/);
+    m = text.match(/^(?:mets?|r[èe]gle|monte|baisse)? ?(?:le )?(?:volume|son) (?:à|a|sur) (\d{1,3})(?: ?%| pour ?cent)?$/);
     if (m) return { kind: 'tool', tool: 'regler_volume', args: { pourcentage: Math.min(100, Number(m[1])) } };
     if (/^(coupe|couper) le son$/.test(text)) return { kind: 'tool', tool: 'regler_volume', args: { pourcentage: 0 } };
     if (/^(mets (la musique )?(en )?pause|pause|mets pause)$/.test(text)) {
