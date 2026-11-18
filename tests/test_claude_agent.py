@@ -124,10 +124,11 @@ def test_tool_round_trip_through_the_real_sdk(monkeypatch) -> None:
     assert mcp.calls == [("systeme", "calcul", {"expression": "6*7"})]
 
     first, beta_header = requests[0]
-    assert first["model"] == "claude-opus-5-5"
+    assert first["model"] == "claude-fable-5-2"
     assert first["fallbacks"] == "default"
     assert "server-side-fallback-2026-07-01" in beta_header
-    assert first["output_config"] == {"effort": "low"}
+    assert first["output_config"] == {"effort": "medium"}
+    assert "speed" not in first
     assert first["system"] == "Tu es Jarvis."
     assert [tool["name"] for tool in first["tools"]] == ["systeme__calcul"]
     assert "thinking" not in first and "temperature" not in first
@@ -213,3 +214,40 @@ def test_claude_answers_first_and_local_model_takes_over_when_it_fails(monkeypat
     answer, model, remote, *_ = AssistantService().respond("ordre-user", "b", "Bonjour")
     assert (answer, model, remote) == ("Réponse locale.", "ollama/llama3.1", False)
     assert order == ["claude", "local"]
+
+
+def test_falls_back_to_opus_when_the_account_cannot_use_the_best_model(monkeypatch) -> None:
+    monkeypatch.setattr(claude_module, "mcp_service", MCPService(config_path="/inexistant.json"))
+    models: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        models.append(body["model"])
+        if body["model"] == "claude-fable-5-2":
+            return httpx2.Response(
+                400,
+                json={
+                    "type": "error",
+                    "error": {"type": "invalid_request_error", "message": "30-day retention required"},
+                },
+            )
+        return httpx2.Response(200, json=_message([{"type": "text", "text": "En ligne."}], "end_turn"))
+
+    service = _service(handler)
+    result = asyncio.run(service.chat(message="Test", history=[], system_prompt="Jarvis"))
+    assert models == ["claude-fable-5-2", "claude-opus-5-5"]
+    assert result.answer == "En ligne."
+    assert "claude-opus-5-5 à la place" in service.last_error
+
+
+def test_fast_mode_is_opt_in(monkeypatch) -> None:
+    monkeypatch.setattr(claude_module, "mcp_service", MCPService(config_path="/inexistant.json"))
+    monkeypatch.setattr(settings, "claude_fast", True)
+    seen: dict = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.update(json.loads(request.content))
+        return httpx2.Response(200, json=_message([{"type": "text", "text": "Oui."}], "end_turn"))
+
+    asyncio.run(_service(handler).chat(message="Test", history=[], system_prompt="Jarvis"))
+    assert seen["speed"] == "fast"

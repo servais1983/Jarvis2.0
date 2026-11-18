@@ -63,7 +63,7 @@ Au premier lancement, macOS demande l'accès au micro, puis l'autorisation de pi
 
 Les commandes directes (ouvrir une application, volume, heure…) ne passent par aucun modèle. Tout le reste est répondu par un moteur de langage, dans cet ordre : **Claude** s'il est configuré, sinon le **modèle local Ollama**, sinon OpenAI si une clé est présente.
 
-**Claude (recommandé pour l'intelligence).** Jarvis utilise `claude-opus-5-5` avec les mêmes outils que le modèle local.
+**Claude (recommandé pour l'intelligence).** Jarvis utilise `claude-fable-5-2`, le modèle le plus capable d'Anthropic, avec les mêmes outils que le modèle local. Si votre compte n'y a pas accès (Fable exige par exemple la conservation des données 30 jours, incompatible avec un compte « zéro rétention »), Jarvis le dit et passe à `claude-opus-5-5`.
 
 ```bash
 /Applications/Jarvis.app/Contents/MacOS/Jarvis --configure-claude    # saisie masquée de la clé
@@ -72,19 +72,19 @@ Les commandes directes (ouvrir une application, volume, heure…) ne passent par
 
 La clé se crée sur console.anthropic.com et est enregistrée dans `~/Library/Application Support/Jarvis/.env`, lisible par vous seul. À savoir avant de l'activer :
 
-- c'est un service **payant à l'usage** (4 $ par million de jetons en entrée, 20 $ en sortie pour ce modèle ; une question vocale courte coûte de l'ordre d'un centime) ;
+- c'est un service **payant à l'usage** (8 $ par million de jetons en entrée, 40 $ en sortie pour Fable ; une question vocale courte coûte de l'ordre d'un à deux centimes) ;
 - le **texte** de vos demandes et les résultats d'outils sont envoyés à Anthropic ; l'audio du micro, lui, est transcrit sur le Mac et n'en sort pas ;
 - si une demande est déclinée par les filtres de sécurité du modèle, l'API la rejoue automatiquement sur un modèle de repli (`fallbacks: "default"`) ;
 - si Claude est injoignable (réseau, clé refusée, quota), Jarvis le dit et bascule sur le modèle local.
 
-Réglages : `JARVIS_CLAUDE_MODEL` (défaut `claude-opus-5-5`), `JARVIS_CLAUDE_EFFORT` (défaut `low`, pour des réponses rapides ; `medium` ou `high` pour plus de réflexion).
+Réglages : `JARVIS_CLAUDE_MODEL` (défaut `claude-fable-5-2`), `JARVIS_CLAUDE_FALLBACK_MODEL` (défaut `claude-opus-5-5`), `JARVIS_CLAUDE_EFFORT` (défaut `medium` ; `low` répond plus vite, `high` réfléchit plus), `JARVIS_CLAUDE_FAST=true` (sortie jusqu'à 2,5 fois plus rapide, tarif doublé).
 
 **Modèle local.** Gratuit et entièrement sur le Mac. `llama3.1` par défaut ; avec 24 Go de mémoire ou plus, `JARVIS_OLLAMA_MODEL=qwen2.5:14b` répond nettement mieux (`ollama pull qwen2.5:14b`).
 
 ### Limites connues
 
 - Pendant que Jarvis parle, et un instant après, le micro est ignoré pour qu'il ne prenne jamais sa propre voix pour une demande. On l'interrompt avec la touche Échap. `JARVIS_VOICE_BARGE_IN=true` autorise l'interruption à la voix (« Jarvis, stop ») ; à réserver à un usage au casque, sur haut-parleurs les deux voix se mélangent.
-- **L'intelligence est celle du modèle local.** Un modèle de 8 milliards de paramètres comme `llama3.1` tient une conversation simple et appelle des outils, mais il n'a ni la finesse ni la mémoire du Jarvis du film. Avec 24 Go de mémoire ou plus, un modèle plus gros (`JARVIS_OLLAMA_MODEL=qwen2.5:14b`) répond nettement mieux.
+- **Sans Claude, l'intelligence est celle du modèle local.** Un modèle de 8 milliards de paramètres comme `llama3.1` tient une conversation simple et appelle des outils, mais il n'a ni la finesse ni la mémoire du Jarvis du film. Avec 24 Go de mémoire ou plus, un modèle plus gros (`JARVIS_OLLAMA_MODEL=qwen2.5:14b`) répond nettement mieux.
 - **Journal** : chaque phrase entendue et ce que Jarvis en a fait est écrit dans `~/Library/Application Support/Jarvis/logs/jarvis.log` (« Compris », « Ignoré », « Écarté »). C'est le premier endroit où regarder quand il comprend de travers.
 - Les questions libres demandent Ollama (`brew install ollama`) et un modèle qui gère les outils (`llama3.1` par défaut, ~5 Go). Sans lui, seules les commandes directes répondent, et Jarvis le dit.
 - L'application n'est ni signée ni notariée par Apple : cela demande un compte développeur Apple.

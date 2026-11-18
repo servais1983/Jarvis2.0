@@ -68,8 +68,10 @@ class Settings(BaseSettings):
     ollama_num_ctx: int = 8192
     # Cerveau Claude (facultatif) : activé quand une clé ANTHROPIC_API_KEY est fournie
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
-    claude_model: str = "claude-opus-5-5"
-    claude_effort: str = "low"
+    claude_model: str = "claude-fable-5-2"           # le modèle le plus capable d'Anthropic
+    claude_fallback_model: str = "claude-opus-5-5"   # si le compte n'a pas accès au premier
+    claude_effort: str = "medium"                    # niveau conseillé pour la conversation
+    claude_fast: bool = False                        # sortie jusqu'à 2,5x plus rapide, tarif doublé
     claude_timeout_seconds: float = 60.0
     # Voix native (micro permanent + mot d'éveil + transcription locale)
     native_voice_enabled: bool = False

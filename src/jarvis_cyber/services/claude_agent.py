@@ -32,6 +32,14 @@ class ClaudeUnavailableError(Exception):
     """Claude n'a pas pu répondre : passer au moteur suivant."""
 
 
+class _ModelNotUsableError(Exception):
+    """Ce modèle précis est refusé (accès, compte, requête) : un autre modèle peut répondre."""
+
+    def __init__(self, reason: str, cause: Exception) -> None:
+        super().__init__(f"{reason} ({str(cause)[:300]})")
+        self.reason = reason
+
+
 def claude_sdk_available() -> bool:
     return importlib.util.find_spec("anthropic") is not None
 
@@ -120,6 +128,25 @@ class ClaudeAgentService:
         }
 
     async def chat(self, message: str, history: list[dict], system_prompt: str) -> LocalAgentResult:
+        """Répond avec le modèle configuré ; s'il est refusé au compte, avec le modèle de secours."""
+        try:
+            return await self._chat_with(settings.claude_model, message, history, system_prompt)
+        except _ModelNotUsableError as exc:
+            fallback = settings.claude_fallback_model
+            if not fallback or fallback == settings.claude_model:
+                raise self._unavailable(exc.reason, exc) from exc
+            logger.warning("%s Nouvel essai avec %s.", exc.reason, fallback)
+            try:
+                result = await self._chat_with(fallback, message, history, system_prompt)
+            except _ModelNotUsableError as second:
+                raise self._unavailable(second.reason, second) from second
+            # Le secours a répondu, mais l'utilisateur doit savoir que le premier modèle est refusé
+            self.last_error = f"{exc.reason} J'utilise {fallback} à la place."
+            return result
+
+    async def _chat_with(
+        self, model: str, message: str, history: list[dict], system_prompt: str
+    ) -> LocalAgentResult:
         import anthropic
 
         client = self._get_client()
@@ -128,8 +155,11 @@ class ClaudeAgentService:
         if not messages or messages[-1] != {"role": "user", "content": message}:
             messages.append({"role": "user", "content": message})
 
+        # Pas de paramètre `thinking` : sur ces modèles la réflexion est toujours active et
+        # se règle par l'effort. Pendant la boucle d'outils, `system` et `tools` ne changent
+        # pas et l'historique est seulement complété, ce qu'exige le contrôle d'historique.
         request: dict = {
-            "model": settings.claude_model,
+            "model": model,
             "max_tokens": 8000,
             "system": system_prompt,
             "messages": messages,
@@ -139,6 +169,8 @@ class ClaudeAgentService:
         }
         if definitions:
             request["tools"] = definitions
+        if settings.claude_fast:
+            request["speed"] = "fast"
 
         tools_used: list[str] = []
         try:
@@ -175,9 +207,12 @@ class ClaudeAgentService:
         except anthropic.AuthenticationError as exc:
             raise self._unavailable("La clé API Anthropic est refusée.", exc) from exc
         except anthropic.PermissionDeniedError as exc:
-            raise self._unavailable("La clé API Anthropic n'a pas accès à ce modèle.", exc) from exc
+            raise _ModelNotUsableError(f"Ce compte n'a pas accès à {model}.", exc) from exc
         except anthropic.NotFoundError as exc:
-            raise self._unavailable(f"Modèle {settings.claude_model} introuvable.", exc) from exc
+            raise _ModelNotUsableError(f"Le modèle {model} est introuvable.", exc) from exc
+        except anthropic.BadRequestError as exc:
+            # Par exemple : compte sans conservation des données 30 jours, exigée par Fable
+            raise _ModelNotUsableError(f"L'API refuse la requête pour {model}.", exc) from exc
         except anthropic.RateLimitError as exc:
             raise self._unavailable("Limite de débit Anthropic atteinte.", exc) from exc
         except anthropic.APIStatusError as exc:
