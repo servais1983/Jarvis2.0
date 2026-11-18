@@ -375,3 +375,40 @@ def test_polite_closers_end_the_conversation_without_a_reply(closer: str) -> Non
     assert _drain(subscriber) == []
     engine._handle("et la météo ?")               # la conversation est refermée
     assert _drain(subscriber) == [{"type": "heard", "text": "et la météo ?", "addressed": False}]
+
+
+def test_sentence_chunker_releases_whole_sentences() -> None:
+    from jarvis_cyber.voice_native.tts import SentenceChunker
+
+    chunker = SentenceChunker(min_chars=10)
+    out = []
+    for piece in ["Il est dix-sept ", "heures. Ta réunion ", "commence dans dix minutes. Ok. ", "Autre"]:
+        out += chunker.feed(piece)
+    assert out == ["Il est dix-sept heures.", "Ta réunion commence dans dix minutes."]
+    assert chunker.flush() == "Ok. Autre"   # trop court seul : attend la suite
+
+
+def test_queued_sentences_are_spoken_in_order_then_listening_resumes() -> None:
+    import time as _time
+
+    speaker = FakeSpeaker()
+    engine = NativeVoiceEngine(ScriptedTranscriber([]), speaker, lambda: None, followup_seconds=30)
+    subscriber = engine.subscribe()
+    engine.say_part("Première phrase.", first=True)
+    engine.say_part("Deuxième phrase.")
+    deadline = _time.monotonic() + 3
+    while engine._queue_worker is not None and _time.monotonic() < deadline:
+        _time.sleep(0.01)
+    assert speaker.spoken == ["Première phrase.", "Deuxième phrase."]
+    assert engine._engaged_until > _time.monotonic()      # il écoute la suite sans mot d'éveil
+    events = []
+    while not subscriber.empty():
+        events.append(subscriber.get())
+    assert {"type": "say", "text": "Première phrase. Deuxième phrase."} in events
+
+
+def test_stop_word_drops_the_sentences_still_queued() -> None:
+    engine = NativeVoiceEngine(ScriptedTranscriber([]), FakeSpeaker(), lambda: None)
+    engine._pending = ["encore une phrase"]
+    engine._handle("Jarvis, stop")
+    assert engine._pending == []

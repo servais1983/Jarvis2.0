@@ -14,6 +14,7 @@ import importlib.util
 import json
 import logging
 import re
+from collections.abc import Callable
 
 from jarvis_cyber.config import settings
 from jarvis_cyber.services.local_agent import LocalAgentResult
@@ -38,6 +39,27 @@ class _ModelNotUsableError(Exception):
     def __init__(self, reason: str, cause: Exception) -> None:
         super().__init__(f"{reason} ({str(cause)[:300]})")
         self.reason = reason
+
+
+def _echoable(content: list) -> list:
+    """Contenu d'une réponse tel qu'il peut être renvoyé dans la suite de la boucle.
+
+    Après un repli en cours de flux, un bloc `fallback` marque la frontière : les blocs
+    de réflexion et d'appel d'outil produits avant elle par le modèle refusé ne doivent
+    pas être renvoyés. Le texte, et tout ce qui suit la frontière, est gardé tel quel.
+    """
+    boundary = max(
+        (i for i, block in enumerate(content) if getattr(block, "type", None) == "fallback"),
+        default=-1,
+    )
+    if boundary < 0:
+        return content
+    internal = {"thinking", "redacted_thinking", "tool_use", "server_tool_use"}
+    return [
+        block
+        for i, block in enumerate(content)
+        if i >= boundary or getattr(block, "type", None) not in internal
+    ]
 
 
 def claude_sdk_available() -> bool:
@@ -127,17 +149,29 @@ class ClaudeAgentService:
             "is_error": bool(result["is_error"]),
         }
 
-    async def chat(self, message: str, history: list[dict], system_prompt: str) -> LocalAgentResult:
-        """Répond avec le modèle configuré ; s'il est refusé au compte, avec le modèle de secours."""
+    async def chat(
+        self,
+        message: str,
+        history: list[dict],
+        system_prompt: str,
+        on_text: Callable[[str], None] | None = None,
+    ) -> LocalAgentResult:
+        """Répond avec le modèle configuré ; s'il est refusé au compte, avec le modèle de secours.
+
+        Avec `on_text`, la réponse arrive en flux : chaque morceau de texte est transmis
+        dès sa génération, pour que la voix commence avant la fin de la réponse.
+        """
         try:
-            return await self._chat_with(settings.claude_model, message, history, system_prompt)
+            return await self._chat_with(
+                settings.claude_model, message, history, system_prompt, on_text
+            )
         except _ModelNotUsableError as exc:
             fallback = settings.claude_fallback_model
             if not fallback or fallback == settings.claude_model:
                 raise self._unavailable(exc.reason, exc) from exc
             logger.warning("%s Nouvel essai avec %s.", exc.reason, fallback)
             try:
-                result = await self._chat_with(fallback, message, history, system_prompt)
+                result = await self._chat_with(fallback, message, history, system_prompt, on_text)
             except _ModelNotUsableError as second:
                 raise self._unavailable(second.reason, second) from second
             # Le secours a répondu, mais l'utilisateur doit savoir que le premier modèle est refusé
@@ -145,7 +179,12 @@ class ClaudeAgentService:
             return result
 
     async def _chat_with(
-        self, model: str, message: str, history: list[dict], system_prompt: str
+        self,
+        model: str,
+        message: str,
+        history: list[dict],
+        system_prompt: str,
+        on_text: Callable[[str], None] | None = None,
     ) -> LocalAgentResult:
         import anthropic
 
@@ -175,14 +214,14 @@ class ClaudeAgentService:
         tools_used: list[str] = []
         try:
             for _ in range(_MAX_TOOL_ROUNDS + 1):
-                response = await client.beta.messages.create(**request)
+                response = await self._call(client, request, on_text)
 
                 if response.stop_reason == "refusal":
                     return self._result(
                         response, "Je ne peux pas t'aider sur cette demande.", tools_used
                     )
                 if response.stop_reason == "pause_turn":
-                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append({"role": "assistant", "content": _echoable(response.content)})
                     continue
                 if response.stop_reason != "tool_use":
                     text = " ".join(
@@ -195,7 +234,7 @@ class ClaudeAgentService:
                     return self._result(response, text, tools_used)
 
                 # Tous les résultats d'outils repartent dans un seul message utilisateur
-                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "assistant", "content": _echoable(response.content)})
                 results = []
                 for block in response.content:
                     if block.type != "tool_use":
@@ -219,6 +258,15 @@ class ClaudeAgentService:
             raise self._unavailable(f"Erreur Anthropic {exc.status_code}.", exc) from exc
         except anthropic.APIConnectionError as exc:
             raise self._unavailable("Anthropic est injoignable (réseau).", exc) from exc
+
+    @staticmethod
+    async def _call(client, request: dict, on_text: Callable[[str], None] | None):
+        if on_text is None:
+            return await client.beta.messages.create(**request)
+        async with client.beta.messages.stream(**request) as stream:
+            async for chunk in stream.text_stream:
+                on_text(chunk)
+            return await stream.get_final_message()
 
     def _result(self, response, text: str, tools_used: list[str]) -> LocalAgentResult:
         self.last_error = None

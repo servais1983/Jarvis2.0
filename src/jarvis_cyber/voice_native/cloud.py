@@ -19,6 +19,7 @@ import tempfile
 import threading
 import wave
 from collections.abc import Callable
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 
 import httpx
 import numpy as np
@@ -118,6 +119,8 @@ class CloudSpeaker(Speaker):
         self._fallback = fallback or Speaker()
         self._client = httpx.Client(base_url=OPENAI_URL, timeout=timeout, transport=transport)
         self._player = player or shutil.which("afplay")
+        self._prefetched: dict[str, Future] = {}
+        self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="jarvis-tts-prefetch")
         self._generation = 0
         self._busy = False  # vrai dès la demande, avant même que le son commence
 
@@ -148,13 +151,23 @@ class CloudSpeaker(Speaker):
         response.raise_for_status()
         return response.content
 
+    def prefetch(self, text: str) -> None:
+        """Lance la synthèse d'une phrase à venir, pour l'enchaîner sans blanc."""
+        spoken = clean_for_speech(text)
+        if spoken and self._player and spoken not in self._prefetched:
+            self._prefetched[spoken] = self._pool.submit(self.synthesize, spoken)
+
+    def _audio_for(self, spoken: str) -> bytes:
+        future = self._prefetched.pop(spoken, None)
+        return future.result() if future is not None else self.synthesize(spoken)
+
     def speak(self, text: str, on_done: Callable[[], None] | None = None) -> bool:
         spoken = clean_for_speech(text)
         if not spoken:
             if on_done:
                 on_done()
             return False
-        self.stop()
+        self._halt_playback()
         with self._lock:
             self._generation += 1
             generation = self._generation
@@ -164,8 +177,8 @@ class CloudSpeaker(Speaker):
             path = None
             try:
                 try:
-                    audio = self.synthesize(spoken) if self._player else b""
-                except httpx.HTTPError as exc:
+                    audio = self._audio_for(spoken) if self._player else b""
+                except (httpx.HTTPError, CancelledError) as exc:
                     logger.warning("Voix en ligne indisponible, voix système utilisée : %s", exc)
                     audio = b""
                 if generation != self._generation:
@@ -204,9 +217,17 @@ class CloudSpeaker(Speaker):
         threading.Thread(target=run, name="jarvis-tts-cloud", daemon=True).start()
         return True
 
-    def stop(self) -> None:
+    def _halt_playback(self) -> None:
         with self._lock:
             self._generation += 1
             self._busy = False
         self._fallback.stop()
         super().stop()
+
+    def stop(self) -> None:
+        """Interruption : coupe la voix et oublie les phrases préparées."""
+        with self._lock:
+            pending, self._prefetched = self._prefetched, {}
+        for future in pending.values():
+            future.cancel()
+        self._halt_playback()

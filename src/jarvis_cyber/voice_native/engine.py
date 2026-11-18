@@ -81,6 +81,9 @@ class NativeVoiceEngine:
         self._engaged_until = 0.0
         self._last_level_at = 0.0
         self._spoken_text = ""
+        self._pending: list[str] = []
+        self._queue_lock = threading.Lock()
+        self._queue_worker: threading.Thread | None = None
         self._speech_seen_at = float("-inf")
         self.state = "stopped"
         self.last_error: str | None = None
@@ -131,6 +134,7 @@ class NativeVoiceEngine:
         source = self._source
         if source is not None:
             source.close()
+        self._clear_queue()
         self._speaker.stop()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
@@ -144,7 +148,49 @@ class NativeVoiceEngine:
 
     # ── Parole ───────────────────────────────────────────────────
 
+    def say_part(self, text: str, first: bool = False) -> None:
+        """Ajoute une phrase à dire à la suite des précédentes (réponse en flux)."""
+        text = text.strip()
+        if not text:
+            return
+        prefetch = getattr(self._speaker, "prefetch", None)
+        with self._queue_lock:
+            if first:
+                self._pending.clear()
+                self._spoken_text = ""
+            self._pending.append(text)
+            self._spoken_text = f"{self._spoken_text} {text}".strip()
+            caption = self._spoken_text
+            if prefetch is not None:
+                prefetch(text)  # la phrase suivante se prépare pendant que la précédente se dit
+            if self._queue_worker is None or not self._queue_worker.is_alive():
+                self._queue_worker = threading.Thread(
+                    target=self._drain_queue, name="jarvis-voice-queue", daemon=True
+                )
+                self._queue_worker.start()
+        self._emit({"type": "say", "text": caption})  # sous-titre au rythme de la voix
+
+    def _drain_queue(self) -> None:
+        self._set_state("speaking")
+        while True:
+            with self._queue_lock:
+                if not self._pending:
+                    self._queue_worker = None
+                    break
+                text = self._pending.pop(0)
+            finished = threading.Event()
+            self._speaker.speak(text, on_done=finished.set)
+            finished.wait(timeout=120)
+        self._engaged_until = time.monotonic() + self._followup
+        if self.state == "speaking":
+            self._set_state("listening" if self.running else "stopped")
+
+    def _clear_queue(self) -> None:
+        with self._queue_lock:
+            self._pending.clear()
+
     def speak(self, text: str) -> None:
+        self._clear_queue()
         self._spoken_text = text
         self._set_state("speaking")
 
@@ -157,6 +203,7 @@ class NativeVoiceEngine:
         self._speaker.speak(text, on_done=done)
 
     def silence(self) -> None:
+        self._clear_queue()
         self._speaker.stop()
 
     def _is_echo(self, text: str) -> bool:
@@ -258,11 +305,13 @@ class NativeVoiceEngine:
             return
         logger.info("Compris : %r → commande %r", text, command)
         if command.lower().strip(" .!") in _STOP_WORDS:
+            self._clear_queue()
             self._speaker.stop()
             self._engaged_until = 0.0
             self._emit({"type": "stop"})
             return
-        if self._speaker.speaking:
+        if self._speaker.speaking or self._pending:
+            self._clear_queue()
             self._speaker.stop()
         self._engaged_until = time.monotonic() + self._followup
         if command:

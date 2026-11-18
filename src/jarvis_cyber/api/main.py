@@ -134,6 +134,7 @@ from jarvis_cyber.services.automations import automation_service
 from jarvis_cyber.services.briefings import briefing_service
 from jarvis_cyber.services.mcp_client import MCPError, mcp_service
 from jarvis_cyber.services.native_voice import get_native_voice, native_voice_available
+from jarvis_cyber.voice_native.tts import SentenceChunker
 from jarvis_cyber.api.native_voice import router as native_voice_router
 from jarvis_cyber.api.native_voice import system_router
 from jarvis_cyber.services.scheduler import automation_scheduler
@@ -521,15 +522,36 @@ def export_audit_events(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest, user: UserResponse = Depends(require_permissions("chat.use"))) -> ChatResponse:
+    voice = None
+    if payload.speak and settings.native_voice_enabled:
+        engine = get_native_voice()
+        voice = engine if engine.running else None
+    chunker = SentenceChunker()
+    said: list[str] = []
+
+    def on_text(chunk: str) -> None:
+        for sentence in chunker.feed(chunk):
+            voice.say_part(sentence, first=not said)
+            said.append(sentence)
+
     answer, model, used_remote_model, knowledge_hits, citations, tools_used = (
         assistant_service.respond(
             user_id=user.user_id,
             session_id=payload.session_id,
             message=payload.message,
             role=user.role,
+            on_text=on_text if voice is not None else None,
         )
     )
+    if voice is not None:
+        rest = chunker.flush()
+        if said:
+            if rest:
+                voice.say_part(rest)
+        else:
+            voice.speak(answer)  # réponse non diffusée en flux (modèle local, repli…)
     return ChatResponse(
+        spoken=voice is not None,
         session_id=payload.session_id,
         answer=answer,
         model=model,

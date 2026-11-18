@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     session_id: str = Field(default="default", min_length=1)
     message: str = Field(min_length=1)
+    speak: bool = False  # la voix native dit la réponse au fil de sa génération
 
 
 class ChatResponse(BaseModel):
@@ -18,6 +19,7 @@ class ChatResponse(BaseModel):
     knowledge_hits: list["KnowledgeSearchResult"] = Field(default_factory=list)
     citations: list["KnowledgeCitation"] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
+    spoken: bool = False  # déjà dite par la voix native : l'interface ne la relit pas
 
 
 class HealthResponse(BaseModel):

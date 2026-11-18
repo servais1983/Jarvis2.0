@@ -54,6 +54,7 @@ class AssistantService:
         message: str,
         *,
         role: str = "admin",
+        on_text=None,
     ) -> tuple[str, str, bool, list[KnowledgeSearchResult], list[KnowledgeCitation], list[str]]:
         memory_store.append(user_id=user_id, session_id=session_id, role="user", content=message)
         history = memory_store.recent(
@@ -105,7 +106,7 @@ class AssistantService:
         )
         # Claude d'abord s'il est configuré, sinon le modèle local
         local_result = self._try_claude(
-            message, history_payload[-_CLAUDE_HISTORY_TURNS:], conversation_prompt
+            message, history_payload[-_CLAUDE_HISTORY_TURNS:], conversation_prompt, on_text
         ) or self._try_local_agent(
             message, history_payload[-_LOCAL_HISTORY_TURNS:], conversation_prompt
         )
@@ -215,14 +216,15 @@ class AssistantService:
         )
 
     @staticmethod
-    def _try_claude(message: str, history: list[dict], system_prompt: str):
+    def _try_claude(message: str, history: list[dict], system_prompt: str, on_text=None):
         """Tente une réponse via Claude + outils MCP ; None si non configuré ou en échec."""
         if not claude_agent_service.enabled:
             return None
+        extra = {"on_text": on_text} if on_text is not None else {}
         try:
             return asyncio.run(
                 claude_agent_service.chat(
-                    message=message, history=history, system_prompt=system_prompt
+                    message=message, history=history, system_prompt=system_prompt, **extra
                 )
             )
         except ClaudeUnavailableError as exc:

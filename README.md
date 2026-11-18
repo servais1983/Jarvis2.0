@@ -79,6 +79,8 @@ La clé se crée sur console.anthropic.com et est enregistrée dans `~/Library/A
 
 Réglages : `JARVIS_CLAUDE_MODEL` (défaut `claude-fable-5-2`), `JARVIS_CLAUDE_FALLBACK_MODEL` (défaut `claude-opus-5-5`), `JARVIS_CLAUDE_EFFORT` (défaut `medium` ; `low` répond plus vite, `high` réfléchit plus), `JARVIS_CLAUDE_FAST=true` (sortie jusqu'à 2,5 fois plus rapide, tarif doublé).
 
+**Réponse en flux.** Avec Claude, Jarvis commence à parler dès la première phrase prête, pendant que la suite s'écrit ; avec la voix en ligne, la phrase suivante est préparée pendant qu'il dit la précédente.
+
 **Premier lancement.** L'application propose deux clés, en saisie masquée, une seule fois : Anthropic (le cerveau) et OpenAI (la voix et l'écoute). « Plus tard » garde le fonctionnement local ; on peut les saisir ensuite avec `--configure-claude` et `--configure-voice`.
 
 ### Voix et écoute en ligne (option)

@@ -251,3 +251,63 @@ def test_fast_mode_is_opt_in(monkeypatch) -> None:
 
     asyncio.run(_service(handler).chat(message="Test", history=[], system_prompt="Jarvis"))
     assert seen["speed"] == "fast"
+
+
+def _sse(events: list[dict]) -> bytes:
+    return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode()
+
+
+def test_streamed_answer_reaches_the_voice_piece_by_piece(monkeypatch) -> None:
+    monkeypatch.setattr(claude_module, "mcp_service", MCPService(config_path="/inexistant.json"))
+    seen: dict = {}
+    start = _message([], None)
+    start["model"] = "claude-fable-5-2"
+    pieces = ["Bonjour Steve. ", "Tout est ", "en ordre."]
+    events = [
+        {"type": "message_start", "message": start},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        *[
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": p}}
+            for p in pieces
+        ],
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+            "usage": {"output_tokens": 9},
+        },
+        {"type": "message_stop"},
+    ]
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.update(json.loads(request.content))
+        return httpx2.Response(
+            200, content=_sse(events), headers={"content-type": "text/event-stream"}
+        )
+
+    received: list[str] = []
+    result = asyncio.run(
+        _service(handler).chat(
+            message="Bonjour", history=[], system_prompt="Jarvis", on_text=received.append
+        )
+    )
+    assert seen["stream"] is True and seen["model"] == "claude-fable-5-2"
+    assert received == pieces
+    assert result.answer == "Bonjour Steve. Tout est en ordre."
+    assert result.model == "claude/claude-fable-5-2"
+
+
+def test_blocks_of_a_refused_attempt_are_not_echoed_back() -> None:
+    from types import SimpleNamespace as B
+
+    from jarvis_cyber.services.claude_agent import _echoable
+
+    content = [
+        B(type="thinking"), B(type="text"), B(type="tool_use"),
+        B(type="fallback"), B(type="thinking"), B(type="tool_use"),
+    ]
+    assert [b.type for b in _echoable(content)] == [
+        "text", "fallback", "thinking", "tool_use",
+    ]
+    plain = [B(type="thinking"), B(type="tool_use")]
+    assert _echoable(plain) is plain

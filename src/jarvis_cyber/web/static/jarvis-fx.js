@@ -931,11 +931,18 @@ async function askModel(text) {
     const res = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...fxAuthHeaders() },
-      body: JSON.stringify({ session_id: chatSessionId(), message: text }),
+      // Avec la voix native, la réponse est dite au fil de sa génération côté serveur
+      body: JSON.stringify({ session_id: chatSessionId(), message: text, speak: !!NativeLink.active }),
     });
     if (!res.ok) throw new Error(String(res.status));
     const data = await res.json();
-    respond(data.answer || "Je n'ai pas de réponse à te donner.");
+    const answer = data.answer || "Je n'ai pas de réponse à te donner.";
+    if (data.spoken) {
+      logMessage('assistant', answer);
+      JarvisVoice.showCaption(answer.length > 420 ? answer.slice(0, 420) + '…' : answer);
+    } else {
+      respond(answer);
+    }
     if (data.tools_used && data.tools_used.length) {
       logMessage('assistant', `Outils utilisés : ${data.tools_used.join(', ')}`);
     }
@@ -1216,6 +1223,7 @@ const NativeVoice = (() => {
     }
     if (ev.type === 'wake') { respond(`Oui, ${userName} ?`); return; }
     if (ev.type === 'stop') { JarvisVoice.showCaption(''); return; }
+    if (ev.type === 'say') { JarvisVoice.showCaption(ev.text.length > 420 ? '…' + ev.text.slice(-420) : ev.text); return; }
     if (ev.type === 'command') {
       NativeLink.busy = true;
       Promise.resolve(askJarvis(ev.text)).finally(() => { NativeLink.busy = false; });

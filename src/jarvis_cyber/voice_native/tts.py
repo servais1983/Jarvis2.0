@@ -23,6 +23,32 @@ def clean_for_speech(text: str) -> str:
     return text.lstrip("-")[:900]
 
 
+class SentenceChunker:
+    """Découpe un texte qui arrive par morceaux en phrases complètes, à dire une par une."""
+
+    _END = re.compile(r"[.!?…:;]+[\"»)]*\s+")
+
+    def __init__(self, min_chars: int = 25) -> None:
+        self.min_chars = min_chars
+        self._buffer = ""
+
+    def feed(self, chunk: str) -> list[str]:
+        self._buffer += chunk
+        sentences = []
+        start = 0
+        for match in self._END.finditer(self._buffer):
+            # Une phrase trop courte (« Bien. ») attend la suivante : moins de coupures
+            if match.end() - start >= self.min_chars:
+                sentences.append(self._buffer[start:match.end()].strip())
+                start = match.end()
+        self._buffer = self._buffer[start:]
+        return [s for s in sentences if s]
+
+    def flush(self) -> str:
+        rest, self._buffer = self._buffer.strip(), ""
+        return rest
+
+
 def pick_french_voice(listing: str) -> str | None:
     """Choisit la meilleure voix française dans la sortie de `say -v ?`."""
     french = []

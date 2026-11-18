@@ -151,3 +151,54 @@ def test_first_launch_asks_once_for_missing_keys(tmp_path, monkeypatch) -> None:
 def test_dialog_answer_parsing() -> None:
     assert parse_dialog_answer("button returned:Enregistrer, text returned:sk-ant-123\n") == "sk-ant-123"
     assert parse_dialog_answer("button returned:Plus tard") == ""
+
+
+def test_chat_speaks_the_answer_as_it_is_generated(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from jarvis_cyber.api import main as main_module
+    from jarvis_cyber.config import settings
+
+    class Engine:
+        running = True
+
+        def __init__(self) -> None:
+            self.parts: list[tuple[str, bool]] = []
+            self.full: list[str] = []
+
+        def say_part(self, text, first=False):
+            self.parts.append((text, first))
+
+        def speak(self, text):
+            self.full.append(text)
+
+    engine = Engine()
+    monkeypatch.setattr(settings, "native_voice_enabled", True)
+    monkeypatch.setattr(main_module, "get_native_voice", lambda: engine)
+
+    def respond(**kwargs):
+        on_text = kwargs["on_text"]
+        for piece in ["Il est dix-sept heures, Steve. ", "Ta réunion commence ", "dans dix minutes."]:
+            on_text(piece)
+        return "Il est dix-sept heures…", "claude/claude-fable-5-2", True, [], [], []
+
+    monkeypatch.setattr(main_module.assistant_service, "respond", respond)
+    data = TestClient(main_module.app).post(
+        "/chat", json={"session_id": "flux", "message": "Quelle heure ?", "speak": True}
+    ).json()
+    assert data["spoken"] is True
+    assert engine.parts == [
+        ("Il est dix-sept heures, Steve.", True),
+        ("Ta réunion commence dans dix minutes.", False),
+    ]
+    assert engine.full == []
+
+    # Sans flux (modèle local) : la réponse entière est dite d'un coup
+    monkeypatch.setattr(
+        main_module.assistant_service, "respond",
+        lambda **kw: ("Réponse locale.", "ollama/llama3.1", False, [], [], []),
+    )
+    TestClient(main_module.app).post(
+        "/chat", json={"session_id": "flux", "message": "Bonjour", "speak": True}
+    )
+    assert engine.full == ["Réponse locale."]
