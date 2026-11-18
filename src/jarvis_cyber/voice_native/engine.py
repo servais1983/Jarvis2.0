@@ -201,7 +201,7 @@ class NativeVoiceEngine:
                 if not during_speech:
                     self._set_state("thinking")
                 text = self._transcriber.transcribe(utterance)
-                self._handle(text, during_speech=during_speech)
+                self._handle(text, during_speech=during_speech, audio=utterance)
                 if self.state == "thinking":
                     self._set_state("listening")
         except Exception as exc:  # micro absent, permission refusée, modèle introuvable…
@@ -222,7 +222,7 @@ class NativeVoiceEngine:
             self._set_state("hearing" if segmenter.in_speech else "listening")
         self._emit({"type": "level", "level": round(min(1.0, segmenter.level * 12), 3)})
 
-    def _handle(self, text: str, during_speech: bool = False) -> None:
+    def _handle(self, text: str, during_speech: bool = False, audio=None) -> None:
         text = (text or "").strip()
         if not text:
             return
@@ -240,6 +240,16 @@ class NativeVoiceEngine:
             logger.info("Ignoré (sans mot d'éveil) : %r", text)
             self._emit({"type": "heard", "text": text, "addressed": False})
             return
+
+        # Phrase adressée à Jarvis : une transcription plus fine, si disponible, la corrige
+        refine = getattr(self._transcriber, "refine", None)
+        if refine is not None and audio is not None:
+            refined = (refine(audio, text) or "").strip()
+            if refined and refined != text:
+                refined_result = extract_command(refined, self._wake_word)
+                if refined_result.heard or not result.heard:
+                    text, result = refined, refined_result
+                    self.last_heard = text
 
         command = result.command
         if not result.heard and command.lower().strip(" .!") in _CLOSERS:

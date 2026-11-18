@@ -79,6 +79,17 @@ La clé se crée sur console.anthropic.com et est enregistrée dans `~/Library/A
 
 Réglages : `JARVIS_CLAUDE_MODEL` (défaut `claude-fable-5-2`), `JARVIS_CLAUDE_FALLBACK_MODEL` (défaut `claude-opus-5-5`), `JARVIS_CLAUDE_EFFORT` (défaut `medium` ; `low` répond plus vite, `high` réfléchit plus), `JARVIS_CLAUDE_FAST=true` (sortie jusqu'à 2,5 fois plus rapide, tarif doublé).
 
+**Premier lancement.** L'application propose deux clés, en saisie masquée, une seule fois : Anthropic (le cerveau) et OpenAI (la voix et l'écoute). « Plus tard » garde le fonctionnement local ; on peut les saisir ensuite avec `--configure-claude` et `--configure-voice`.
+
+### Voix et écoute en ligne (option)
+
+Avec une clé OpenAI (`OPENAI_API_KEY`) :
+
+- **voix** : synthèse neuronale `gpt-4o-mini-tts`, voix grave et posée de majordome, bien plus naturelle que les voix du Mac (réglages `JARVIS_CLOUD_TTS_VOICE`, défaut `onyx`) ; si le service ne répond pas, la voix du Mac prend le relais ;
+- **écoute** : le micro reste transcrit sur le Mac. Seules les phrases **adressées à Jarvis** (mot d'éveil entendu, ou conversation en cours) sont retranscrites en ligne par `gpt-4o-transcribe` pour corriger les mots mal compris. Les conversations autour de vous ne quittent pas la machine.
+
+Payant à l'usage, de l'ordre d'un centime par minute de parole. `JARVIS_CLOUD_VOICE_ENABLED=false` désactive l'option sans retirer la clé.
+
 **Modèle local.** Gratuit et entièrement sur le Mac. `llama3.1` par défaut ; avec 24 Go de mémoire ou plus, `JARVIS_OLLAMA_MODEL=qwen2.5:14b` répond nettement mieux (`ollama pull qwen2.5:14b`).
 
 ### Limites connues

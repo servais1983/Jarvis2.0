@@ -53,7 +53,7 @@ def test_local_model_gets_a_short_prompt_without_soc_boilerplate(monkeypatch) ->
     captured = _capture_local_call(monkeypatch, None)
     AssistantService().respond("prompt-user", "prompt", "Pourquoi le ciel est bleu ?")
     prompt = captured["prompt"]
-    assert "assistant personnel de Steve" in prompt
+    assert "intelligence artificielle personnelle de Steve" in prompt
     assert "Appelle un outil uniquement quand la demande l'exige" in prompt
     assert "Connecteurs disponibles" not in prompt        # six lignes « non configuré » inutiles
     assert "Aucun playbook" not in prompt and "Aucun élément" not in prompt

@@ -114,10 +114,18 @@ jobs:
           "$APP" --transcribe "$PWD/heure.wav" --data-dir "$RUNNER_TEMP/jarvis-data"
           du -sh dist/Jarvis.app dist/*.zip dist/*.dmg
 
+      - name: Dialogue de saisie des clés (compilation AppleScript)
+        run: |
+          python -c "from jarvis_cyber.desktop.app import DIALOG_SCRIPT; print(DIALOG_SCRIPT)" > dialog.applescript
+          osacompile -o "$RUNNER_TEMP/dialog.scpt" dialog.applescript
+          echo "Dialogue compilé"
+
       - name: Fenêtre réelle de l'application (capture d'écran)
         continue-on-error: true
         run: |
           APP=dist/Jarvis.app/Contents/MacOS/Jarvis
+          # Pas de dialogue de clés au premier lancement sur la machine de test
+          mkdir -p "$RUNNER_TEMP/jarvis-gui" && touch "$RUNNER_TEMP/jarvis-gui/.cles-demandees"
           "$APP" --data-dir "$RUNNER_TEMP/jarvis-gui" > gui.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8765/health > /dev/null && break; sleep 1; done
           curl -sf http://127.0.0.1:8765/health

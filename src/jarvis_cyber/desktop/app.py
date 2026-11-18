@@ -88,6 +88,85 @@ def save_env_value(base: Path, name: str, value: str) -> Path:
     return env_file
 
 
+_SETUP_KEYS = (
+    (
+        "ANTHROPIC_API_KEY",
+        (
+            "Cerveau : clé API Anthropic (console.anthropic.com). Elle donne à Jarvis le modèle "
+            "Claude le plus capable. Laisse vide pour garder le modèle local."
+        ),
+    ),
+    (
+        "OPENAI_API_KEY",
+        (
+            "Voix et écoute : clé API OpenAI (platform.openai.com). Elle donne à Jarvis une voix "
+            "naturelle et corrige ce qu'il entend mal. Laisse vide pour garder la voix du Mac."
+        ),
+    ),
+)
+
+
+def parse_dialog_answer(output: str) -> str:
+    """Extrait le texte saisi de la sortie de `osascript … display dialog`."""
+    marker = "text returned:"
+    return output.split(marker, 1)[1].strip() if marker in output else ""
+
+
+DIALOG_SCRIPT = (
+    "on run argv\n"
+    "display dialog (item 1 of argv) default answer \"\" with hidden answer "
+    "with title \"J.A.R.V.I.S.\" buttons {\"Plus tard\", \"Enregistrer\"} "
+    "default button \"Enregistrer\"\n"
+    "end run"
+)
+
+
+def ask_secret(prompt: str) -> str:
+    """Boîte de dialogue macOS à saisie masquée ; chaîne vide si annulée ou impossible."""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", DIALOG_SCRIPT, prompt],
+            capture_output=True, text=True, timeout=600, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if "Enregistrer" not in result.stdout:
+        return ""
+    return parse_dialog_answer(result.stdout)
+
+
+def first_launch_setup(base: Path, asker=ask_secret) -> list[str]:
+    """Au premier lancement, propose de saisir les clés manquantes. Rend les noms enregistrés."""
+    marker = base / ".cles-demandees"
+    if marker.exists():
+        return []
+    env_file = base / ".env"
+    present = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
+    saved = []
+    for name, prompt in _SETUP_KEYS:
+        if os.environ.get(name) or f"{name}=" in present:
+            continue
+        value = asker(prompt).strip()
+        if value:
+            save_env_value(base, name, value)
+            saved.append(name)
+    marker.write_text("1\n", encoding="utf-8")
+    return saved
+
+
+def configure_key(base: Path, name: str, label: str) -> int:
+    """Demande une clé dans le terminal (saisie masquée) et l'enregistre."""
+    import getpass
+
+    print(f"{label} La saisie est masquée.")
+    key = getpass.getpass("Clé : ").strip()
+    if not key:
+        print("Aucune clé saisie : rien n'a été modifié.")
+        return 1
+    print(f"Clé enregistrée dans {save_env_value(base, name, key)}.")
+    return 0
+
+
 def configure_claude(base: Path) -> int:
     """Demande la clé API Anthropic dans le terminal (saisie masquée) et l'enregistre."""
     import getpass
@@ -286,6 +365,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check-claude", action="store_true", help="vérifie que Claude répond avec la clé enregistrée"
     )
+    parser.add_argument(
+        "--configure-voice", action="store_true", help="enregistre la clé OpenAI (voix et écoute)"
+    )
     parser.add_argument("--require-voice", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--transcribe", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -304,12 +386,18 @@ def main(argv: list[str] | None = None) -> int:
         runpy.run_path(args.run_script, run_name="__main__")
         return 0
 
-    base = configure_environment(
-        args.data_dir, native_voice=not (args.smoke_test or args.transcribe or args.configure_claude or args.check_claude)
+    one_shot = (
+        args.smoke_test or args.transcribe or args.configure_claude
+        or args.configure_voice or args.check_claude
     )
+    base = configure_environment(args.data_dir, native_voice=not one_shot)
 
     if args.configure_claude:
         return configure_claude(base)
+    if args.configure_voice:
+        return configure_key(
+            base, "OPENAI_API_KEY", "Clé API OpenAI (platform.openai.com → API keys)."
+        )
     if args.check_claude:
         return check_claude()
 
@@ -342,6 +430,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     logger = logging.getLogger("jarvis.desktop")
     logger.info("Dossier de données : %s", base)
+
+    # Premier lancement : proposer les clés avant de charger la configuration
+    if platform.system() == "Darwin" and not (args.headless or args.smoke_test):
+        for name in first_launch_setup(base):
+            logger.info("Clé %s enregistrée au premier lancement.", name)
 
     port = find_free_port(args.port)
     server = ServerThread(port)

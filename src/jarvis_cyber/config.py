@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     claude_fallback_model: str = "claude-opus-5-5"   # si le compte n'a pas accès au premier
     claude_effort: str = "medium"                    # niveau conseillé pour la conversation
     claude_fast: bool = False                        # sortie jusqu'à 2,5x plus rapide, tarif doublé
+    # Voix et écoute en ligne (OpenAI), utilisées seulement si OPENAI_API_KEY est présente
+    cloud_voice_enabled: bool = True
+    cloud_tts_model: str = "gpt-4o-mini-tts"
+    cloud_tts_voice: str = "onyx"
+    cloud_stt_model: str = "gpt-4o-transcribe"
     claude_timeout_seconds: float = 60.0
     # Voix native (micro permanent + mot d'éveil + transcription locale)
     native_voice_enabled: bool = False
